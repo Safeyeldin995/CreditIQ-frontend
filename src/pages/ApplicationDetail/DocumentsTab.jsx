@@ -139,6 +139,15 @@ export default function DocumentsTab({ application, lang }) {
     )
   }
 
+  const handleDeleteDoc = async (doc) => {
+    await supabase.from('documents').delete().eq('id', doc.id)
+    if (doc.file_path) {
+      await supabase.storage.from('documents').remove([doc.file_path])
+    }
+    fetchDocuments()
+    toast(lang === 'ar' ? 'تم حذف المستند' : 'Document removed', 'success')
+  }
+
   const completedCount = documents.filter(d => d.ocr_status === 'completed').length
   const processingCount = documents.filter(d => d.ocr_status === 'pending' || d.ocr_status === 'processing').length
 
@@ -249,6 +258,13 @@ export default function DocumentsTab({ application, lang }) {
                     )}
                   </div>
                 </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc) }}
+                  className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0 p-1 rounded"
+                  title={lang === 'ar' ? 'حذف' : 'Delete'}
+                >
+                  <XCircle size={16} />
+                </button>
               </div>
             )
           })}
@@ -257,3 +273,4 @@ export default function DocumentsTab({ application, lang }) {
     </div>
   )
 }
+
