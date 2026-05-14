@@ -42,9 +42,9 @@ export default function DocumentsTab({ application, lang }) {
       setUploadProgress(p => ({ ...p, [fileId]: 'uploading' }))
 
       try {
-        // Sanitize filename: replace spaces with underscores
-        const safeName = file.name.replace(/\s+/g, '_')
-        const storagePath = `${application.id}/${Date.now()}_${safeName}`
+        // Use timestamp-only path to avoid Arabic/special characters in storage
+        const ext = file.name.split('.').pop().toLowerCase() || 'pdf'
+        const storagePath = `${application.id}/${Date.now()}.${ext}`
 
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
