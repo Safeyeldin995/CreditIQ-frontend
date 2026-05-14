@@ -7,20 +7,19 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 export const N8N_WEBHOOK = 'https://primary-production-82778.up.railway.app/webhook/creditiq-upload'
 
-// Detect document type from filename
 export function detectDocType(filename) {
   const f = filename.toLowerCase()
-  if (f.includes('iscore') || f.includes('ايسكور') || f.includes('i-score') || f.includes('score')) return 'iscore_client'
-  if (f.includes('bank') || f.includes('بنك') || f.includes('حساب') || f.includes('statement')) return 'bank_statement_business'
-  if (f.includes('field') || f.includes('استعلام') || f.includes('ميداني')) return 'field_investigation'
-  if (f.includes('credit') || f.includes('ائتمانية') || f.includes('دراسة')) return 'credit_study'
+  if (f.includes('iscore') || f.includes('ايسكور') || f.includes('ايسكر') || f.includes('i-score') || f.includes('score') || f.includes('سكور')) return 'iscore_client'
+  if (f.includes('bank') || f.includes('بنك') || f.includes('حساب') || f.includes('statement') || f.includes('كشف') || f.includes('رصيد') || f.includes('بنكي')) return 'bank_statement_business'
+  if (f.includes('field') || f.includes('استعلام') || f.includes('ميداني') || f.includes('زيارة') || f.includes('معاينة')) return 'field_investigation'
+  if (f.includes('credit') || f.includes('ائتمانية') || f.includes('دراسة') || f.includes('ائتمان')) return 'credit_study'
   if (f.includes('register') || f.includes('سجل') || f.includes('تجاري')) return 'commercial_register'
-  if (f.includes('tax') || f.includes('ضريب') || f.includes('بطاقة')) return 'tax_card'
-  if (f.includes('invoice') || f.includes('فاتور')) return 'invoices'
-  if (f.includes('financial') || f.includes('مالية') || f.includes('قوائم')) return 'financial_statements'
+  if (f.includes('tax') || f.includes('ضريب') || f.includes('ضرائب')) return 'tax_card'
+  if (f.includes('invoice') || f.includes('فاتور') || f.includes('فواتير') || f.includes('مبيعات')) return 'invoices'
+  if (f.includes('financial') || f.includes('مالية') || f.includes('قوائم') || f.includes('ميزانية') || f.includes('ارباح') || f.includes('خسائر')) return 'financial_statements'
   if (f.includes('protest') || f.includes('بروتستو')) return 'protest_certificate'
   if (f.includes('bankrupt') || f.includes('افلاس') || f.includes('إفلاس')) return 'bankruptcy_declaration'
-  if (f.includes('pledge') || f.includes('رهن')) return 'possessory_pledge'
+  if (f.includes('pledge') || f.includes('رهن') || f.includes('حيازي')) return 'possessory_pledge'
   return 'other'
 }
 
