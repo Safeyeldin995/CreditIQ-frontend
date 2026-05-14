@@ -35,9 +35,20 @@ export default function DocumentsTab({ application, lang }) {
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
+
+    const ALLOWED = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp']
+    const validFiles = Array.from(files).filter(f => {
+      const ext = f.name.split('.').pop().toLowerCase()
+      if (!ALLOWED.includes(ext)) {
+        toast(lang === 'ar' ? 'لا يمكن رفع ' + f.name + ' — يُقبل PDF والصور فقط' : 'Cannot upload ' + f.name + ' — PDF and images only', 'error')
+        return false
+      }
+      return true
+    })
+    if (validFiles.length === 0) return
     setUploading(true)
 
-    for (const file of Array.from(files)) {
+    for (const file of validFiles) {
       const fileId = `${Date.now()}_${file.name}`
       setUploadProgress(p => ({ ...p, [fileId]: 'uploading' }))
 
@@ -164,7 +175,7 @@ export default function DocumentsTab({ application, lang }) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept="application/pdf,image/*"
+          accept="application/pdf,image/jpeg,image/png,image/gif,image/webp"
           className="hidden"
           onChange={e => handleFiles(e.target.files)}
         />
