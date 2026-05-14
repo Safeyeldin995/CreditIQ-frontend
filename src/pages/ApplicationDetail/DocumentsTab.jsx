@@ -159,6 +159,11 @@ export default function DocumentsTab({ application, lang }) {
     toast(lang === 'ar' ? 'تم حذف المستند' : 'Document removed', 'success')
   }
 
+  const handleChangeType = async (doc, newType) => {
+    await supabase.from('documents').update({ document_type: newType }).eq('id', doc.id)
+    fetchDocuments()
+  }
+
   const completedCount = documents.filter(d => d.ocr_status === 'completed').length
   const processingCount = documents.filter(d => d.ocr_status === 'pending' || d.ocr_status === 'processing').length
 
@@ -268,6 +273,16 @@ export default function DocumentsTab({ application, lang }) {
                       </span>
                     )}
                   </div>
+                  <select
+                    value={doc.document_type}
+                    onChange={e => handleChangeType(doc, e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    className="mt-2 text-xs border border-gray-200 rounded px-1 py-0.5 text-gray-600 bg-white w-full"
+                  >
+                    {Object.entries(DOC_TYPE_LABELS).map(([key, val]) => (
+                      <option key={key} value={key}>{lang === 'ar' ? val.ar : val.en}</option>
+                    ))}
+                  </select>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc) }}
