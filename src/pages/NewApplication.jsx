@@ -14,6 +14,16 @@ function getInterestRate(amount) {
   return { rate: '22%', label: 'تمويل متوسط/سمارت' }
 }
 
+// Field wrapper defined OUTSIDE component to prevent focus loss on re-render
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="label">{label}</label>
+      {children}
+    </div>
+  )
+}
+
 export default function NewApplication({ lang, onToggleLang, user }) {
   const [form, setForm] = useState({
     client_name_ar: '', client_name_en: '', national_id: '', date_of_birth: '',
@@ -53,13 +63,6 @@ export default function NewApplication({ lang, onToggleLang, user }) {
   }
 
   const t = { title: lang === 'ar' ? 'طلب تمويل جديد' : 'New Application' }
-
-  const Field = ({ label, children }) => (
-    <div>
-      <label className="label">{label}</label>
-      {children}
-    </div>
-  )
 
   return (
     <Layout title={t.title} lang={lang} onToggleLang={onToggleLang} user={user}>
