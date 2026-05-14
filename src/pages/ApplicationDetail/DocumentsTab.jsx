@@ -51,7 +51,7 @@ export default function DocumentsTab({ application, lang }) {
           .from('documents')
           .upload(storagePath, file, { upsert: true })
 
-        if (uploadError) throw new Error(uploadError.message)
+        if (uploadError) throw new Error('Storage: ' + uploadError.message)
 
         // Get public URL
         const { data: urlData } = supabase.storage
@@ -97,7 +97,7 @@ export default function DocumentsTab({ application, lang }) {
         )
       } catch (err) {
         setUploadProgress(p => ({ ...p, [fileId]: 'error' }))
-        toast(lang === 'ar' ? `فشل رفع ${file.name}` : `Failed to upload ${file.name}`, 'error')
+        toast(`فشل رفع ${file.name}: ${err.message}`, 'error')
       }
     }
 
