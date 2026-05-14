@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Cairo', sans-serif;
+    background-color: #f5f0e8;
+    color: #0d1f35;
+  }
+
+  [dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="ltr"] {
+    direction: ltr;
+    text-align: left;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #c4933a;
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-amber-100 shadow-sm;
+  }
+
+  .btn-primary {
+    @apply bg-navy-800 hover:bg-navy-900 text-white font-semibold py-2.5 px-5 rounded-lg transition-all duration-200 text-sm;
+  }
+
+  .btn-success {
+    @apply bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all duration-200 text-sm;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all duration-200 text-sm;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent hover:bg-navy-50 text-navy-700 font-medium py-2.5 px-5 rounded-lg transition-all duration-200 text-sm border border-navy-200;
+  }
+
+  .input-field {
+    @apply w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all duration-200 bg-white;
+  }
+
+  .label {
+    @apply block text-sm font-semibold text-navy-700 mb-1.5;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-navy-900;
+  }
+
+  .section-title {
+    @apply text-lg font-bold text-navy-800;
+  }
+
+  .stat-card {
+    @apply card p-5 flex flex-col gap-1;
+  }
+
+  .table-header {
+    @apply bg-navy-900 text-white text-sm font-semibold;
+  }
+
+  .table-row {
+    @apply border-b border-gray-100 hover:bg-amber-50 transition-colors cursor-pointer;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200;
+  }
+
+  .sidebar-link-active {
+    @apply bg-gold-500 text-navy-950 font-bold;
+  }
+
+  .sidebar-link-inactive {
+    @apply text-navy-200 hover:bg-navy-800 hover:text-white;
+  }
+
+  .tab-btn {
+    @apply px-5 py-3 text-sm font-semibold border-b-2 transition-all duration-200;
+  }
+
+  .tab-active {
+    @apply border-gold-500 text-gold-600;
+  }
+
+  .tab-inactive {
+    @apply border-transparent text-gray-500 hover:text-navy-700;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    background: white;
+    direction: rtl;
+  }
+
+  .memo-content {
+    font-size: 13pt;
+    line-height: 2;
+    direction: rtl;
+    text-align: right;
+    white-space: pre-wrap;
+  }
+}
