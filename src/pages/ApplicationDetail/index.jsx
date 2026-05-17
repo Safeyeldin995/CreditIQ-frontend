@@ -5,7 +5,9 @@ import Layout from '../../components/Layout'
 import DocumentsTab from './DocumentsTab'
 import AnalysisTab from './AnalysisTab'
 import MemoTab from './MemoTab'
-import { ArrowRight } from 'lucide-react'
+import AnalystDrawer from './AnalystDrawer'
+import CreditMemo from './CreditMemo'
+import { ArrowRight, ClipboardList, FileText } from 'lucide-react'
 
 const TABS = [
   { key: 'documents', ar: 'المستندات', en: 'Documents' },
@@ -18,6 +20,8 @@ export default function ApplicationDetail({ lang, onToggleLang, user }) {
   const [application, setApplication] = useState(null)
   const [activeTab, setActiveTab] = useState('documents')
   const [loading, setLoading] = useState(true)
+  const [showDrawer, setShowDrawer] = useState(false)
+  const [showMemo, setShowMemo] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -92,11 +96,29 @@ export default function ApplicationDetail({ lang, onToggleLang, user }) {
               <span className="text-gray-400 text-xs">| {application.branch}</span>
             </div>
           </div>
-          {application.risk_grade && (
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow ${GRADE_COLORS[application.risk_grade]}`}>
-              {application.risk_grade}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {application.risk_grade && (
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow ${GRADE_COLORS[application.risk_grade]}`}>
+                {application.risk_grade}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-3 border-t border-gray-50 pt-3">
+          <button
+            onClick={() => setShowDrawer(true)}
+            className="btn-primary flex items-center gap-2 text-sm py-2"
+          >
+            <ClipboardList size={15} />
+            {lang === 'ar' ? 'تقييم الملف' : 'Analyst Form'}
+          </button>
+          <button
+            onClick={() => setShowMemo(true)}
+            className="btn-ghost flex items-center gap-2 text-sm py-2"
+          >
+            <FileText size={15} />
+            {lang === 'ar' ? 'جواب الموافقة' : 'Credit Memo'}
+          </button>
         </div>
       </div>
 
@@ -126,5 +148,21 @@ export default function ApplicationDetail({ lang, onToggleLang, user }) {
         </div>
       </div>
     </Layout>
+
+      {showDrawer && application && (
+        <AnalystDrawer
+          application={application}
+          lang={lang}
+          onClose={() => setShowDrawer(false)}
+          onSaved={fetchApplication}
+        />
+      )}
+
+      {showMemo && application && (
+        <CreditMemo
+          application={application}
+          onClose={() => setShowMemo(false)}
+        />
+      )}
   )
 }
