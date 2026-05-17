@@ -62,8 +62,7 @@ const SECTIONS = [
   {id:'visit',label:'الزيارة الميدانية'},
   {id:'guarantors',label:'الضامنون'},
   {id:'calls',label:'المكالمات'},
-  {id:'scoring',label:'نموذج التسعير'},
-  {id:'fivecs',label:'تقييم الجدارة'},
+    {id:'fivecs',label:'تقييم الجدارة'},
   {id:'decision',label:'القرار النهائي'},
 ]
 
@@ -203,7 +202,6 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
   const scores=calcScores()
   const scoreLabel=scores.total>=20?'موافقة بنفس المبلغ':scores.total>=15?'موافقة بتخفيض 25%':scores.total>=10?'تخفيض 50%':'رفض قطعاً'
   const scoreColor=scores.total>=20?'text-emerald-400':scores.total>=15?'text-amber-400':scores.total>=10?'text-orange-400':'text-red-400'
-  const SC_KEYS=['sc1','sc2','sc3','sc4','sc5','sc6','sc7','sc8','sc9','sc10','sc11','sc12']
   const SC_ROWS=[
     {key:'sc1',label:'مدة التمويل',opts:[{l:'أقل من 6 أشهر',v:1},{l:'6-12 شهر',v:2},{l:'12-24 شهر',v:3},{l:'أكثر من 24 شهر',v:2}]},
     {key:'sc2',label:'فترة سداد القسط الأول',opts:[{l:'أكثر من سنة',v:1},{l:'8-12 شهر',v:2},{l:'4-7 أشهر',v:2},{l:'1-3 أشهر',v:3}]},
