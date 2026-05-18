@@ -171,10 +171,12 @@ export default function DocumentsTab({ application, lang }) {
   const getDisplayName = (doc) => {
     if (!doc.file_path) return 'document'
     const fileName = doc.file_path.split('/').pop() || ''
-    // Remove timestamp prefix (digits followed by underscore)
-    const withoutTimestamp = fileName.replace(/^\d+_/, '')
-    // Replace underscores with spaces for readability
-    return withoutTimestamp.replace(/_/g, ' ') || fileName
+    const withoutTimestamp = fileName.replace(/^\d+_/, '').replace(/_/g, ' ').trim()
+    // If nothing meaningful remains (just extension or empty), show the full filename
+    if (!withoutTimestamp || withoutTimestamp === '.pdf' || withoutTimestamp === '.jpg' || withoutTimestamp === '.png') {
+      return fileName
+    }
+    return withoutTimestamp
   }
 
   const completedCount = documents.filter(d => d.ocr_status === 'completed').length
