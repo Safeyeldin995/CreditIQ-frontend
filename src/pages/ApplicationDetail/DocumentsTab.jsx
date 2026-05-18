@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, detectDocType, DOC_TYPE_LABELS, N8N_WEBHOOK } from '../../lib/supabase'
 import { useToast } from '../../components/Toast'
-import { Upload, FileText, CheckCircle, Clock, AlertTriangle, XCircle, RefreshCw, Zap, Eye } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Clock, XCircle, RefreshCw, Zap, Eye } from 'lucide-react'
 
 const STATUS_CONFIG = {
   pending: { label: 'بانتظار المعالجة', labelEn: 'Pending', icon: Clock, color: 'bg-gray-100 text-gray-600' },
@@ -35,7 +35,6 @@ export default function DocumentsTab({ application, lang }) {
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
-
     const ALLOWED = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp']
     const validFiles = Array.from(files).filter(f => {
       const ext = f.name.split('.').pop().toLowerCase()
@@ -51,23 +50,16 @@ export default function DocumentsTab({ application, lang }) {
     for (const file of validFiles) {
       const fileId = `${Date.now()}_${file.name}`
       setUploadProgress(p => ({ ...p, [fileId]: 'uploading' }))
-
       try {
-        const ext = file.name.split('.').pop().toLowerCase() || 'pdf'
-        // Save original name in path so we can display it later
         const safeName = file.name.replace(/[^a-zA-Z0-9.\-]/g, '_')
         const storagePath = `${application.id}/${Date.now()}_${safeName}`
 
         const { error: uploadError } = await supabase.storage
           .from('documents')
           .upload(storagePath, file, { upsert: true })
-
         if (uploadError) throw new Error('Storage: ' + uploadError.message)
 
-        const { data: urlData } = supabase.storage
-          .from('documents')
-          .getPublicUrl(storagePath)
-
+        const { data: urlData } = supabase.storage.from('documents').getPublicUrl(storagePath)
         const docType = detectDocType(file.name)
 
         const { data: docData, error: insertError } = await supabase
@@ -82,7 +74,6 @@ export default function DocumentsTab({ application, lang }) {
           })
           .select()
           .single()
-
         if (insertError) throw new Error(insertError.message)
 
         fetch(N8N_WEBHOOK, {
@@ -97,12 +88,7 @@ export default function DocumentsTab({ application, lang }) {
         }).catch(() => {})
 
         setUploadProgress(p => ({ ...p, [fileId]: 'done' }))
-        toast(
-          lang === 'ar'
-            ? `تم رفع ${file.name} وبدأ التحليل`
-            : `Uploaded ${file.name} — analysis started`,
-          'success'
-        )
+        toast(lang === 'ar' ? `تم رفع ${file.name} وبدأ التحليل` : `Uploaded ${file.name} — analysis started`, 'success')
       } catch (err) {
         setUploadProgress(p => ({ ...p, [fileId]: 'error' }))
         toast(`فشل رفع ${file.name}: ${err.message}`, 'error')
@@ -121,7 +107,6 @@ export default function DocumentsTab({ application, lang }) {
   const handleAnalyzeAll = async () => {
     const completedDocs = documents.filter(d => d.ocr_status === 'completed')
     if (completedDocs.length === 0) return
-
     for (const doc of completedDocs) {
       fetch(N8N_WEBHOOK, {
         method: 'POST',
@@ -134,23 +119,13 @@ export default function DocumentsTab({ application, lang }) {
         }),
       }).catch(() => {})
     }
-
-    await supabase
-      .from('applications')
-      .update({ status: 'under_review' })
-      .eq('id', application.id)
-
-    toast(
-      lang === 'ar' ? 'تم إرسال الملفات للتحليل — سيظهر القرار في تبويب التحليل' : 'Files sent for AI analysis',
-      'success'
-    )
+    await supabase.from('applications').update({ status: 'under_review' }).eq('id', application.id)
+    toast(lang === 'ar' ? 'تم إرسال الملفات للتحليل — سيظهر القرار في تبويب التحليل' : 'Files sent for AI analysis', 'success')
   }
 
   const handleDeleteDoc = async (doc) => {
     await supabase.from('documents').delete().eq('id', doc.id)
-    if (doc.file_path) {
-      await supabase.storage.from('documents').remove([doc.file_path])
-    }
+    if (doc.file_path) await supabase.storage.from('documents').remove([doc.file_path])
     fetchDocuments()
     toast(lang === 'ar' ? 'تم حذف المستند' : 'Document removed', 'success')
   }
@@ -160,26 +135,23 @@ export default function DocumentsTab({ application, lang }) {
     fetchDocuments()
   }
 
- const handleViewDoc = (doc) => {
-  const url = doc.file_url
-  if (url) {
-    const a = document.createElement('a')
-    a.href = url
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  }
-}
+  const handleViewDoc = (doc) => {
+    const url = doc.file_url
+    if (url) {
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
   }
 
-  // Extract original file name from storage path
   const getDisplayName = (doc) => {
     if (!doc.file_path) return 'document'
     const fileName = doc.file_path.split('/').pop() || ''
     const withoutTimestamp = fileName.replace(/^\d+_/, '').replace(/_/g, ' ').trim()
-    // If nothing meaningful remains (just extension or empty), show the full filename
     if (!withoutTimestamp || withoutTimestamp === '.pdf' || withoutTimestamp === '.jpg' || withoutTimestamp === '.png') {
       return fileName
     }
@@ -191,7 +163,6 @@ export default function DocumentsTab({ application, lang }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Upload zone */}
       <div
         onDragOver={e => e.preventDefault()}
         onDrop={handleDrop}
@@ -227,7 +198,6 @@ export default function DocumentsTab({ application, lang }) {
         )}
       </div>
 
-      {/* Status summary */}
       {documents.length > 0 && (
         <div className="flex items-center justify-between bg-navy-50 rounded-xl px-5 py-3">
           <div className="flex items-center gap-4 text-sm">
@@ -255,7 +225,6 @@ export default function DocumentsTab({ application, lang }) {
         </div>
       )}
 
-      {/* Document cards */}
       {documents.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           <FileText size={40} className="mx-auto mb-3 opacity-30" />
@@ -268,7 +237,6 @@ export default function DocumentsTab({ application, lang }) {
             const statusCfg = STATUS_CONFIG[doc.ocr_status] || STATUS_CONFIG.pending
             const StatusIcon = statusCfg.icon
             const displayName = getDisplayName(doc)
-
             return (
               <div key={doc.id} className="card p-4 flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-navy-100 flex items-center justify-center flex-shrink-0">
@@ -287,9 +255,7 @@ export default function DocumentsTab({ application, lang }) {
                       {lang === 'ar' ? statusCfg.label : statusCfg.labelEn}
                     </span>
                     {doc.confidence_score && (
-                      <span className="text-xs text-gray-400">
-                        {Math.round(doc.confidence_score * 100)}%
-                      </span>
+                      <span className="text-xs text-gray-400">{Math.round(doc.confidence_score * 100)}%</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-2">
@@ -303,7 +269,6 @@ export default function DocumentsTab({ application, lang }) {
                         <option key={key} value={key}>{lang === 'ar' ? val.ar : val.en}</option>
                       ))}
                     </select>
-                    {/* View button */}
                     <button
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleViewDoc(doc) }}
                       className="text-blue-400 hover:text-blue-600 transition-colors flex-shrink-0 p-1 rounded"
