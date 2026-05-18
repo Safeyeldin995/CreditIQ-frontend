@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, detectDocType, DOC_TYPE_LABELS, N8N_WEBHOOK } from '../../lib/supabase'
 import { useToast } from '../../components/Toast'
-import { Upload, FileText, CheckCircle, Clock, AlertTriangle, XCircle, RefreshCw, Zap } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Clock, AlertTriangle, XCircle, RefreshCw, Zap, Eye } from 'lucide-react'
 
 const STATUS_CONFIG = {
   pending: { label: 'بانتظار المعالجة', labelEn: 'Pending', icon: Clock, color: 'bg-gray-100 text-gray-600' },
@@ -53,25 +53,23 @@ export default function DocumentsTab({ application, lang }) {
       setUploadProgress(p => ({ ...p, [fileId]: 'uploading' }))
 
       try {
-        // Use timestamp-only path to avoid Arabic/special characters in storage
         const ext = file.name.split('.').pop().toLowerCase() || 'pdf'
-        const storagePath = `${application.id}/${Date.now()}.${ext}`
+        // Save original name in path so we can display it later
+        const safeName = file.name.replace(/[^a-zA-Z0-9.\-]/g, '_')
+        const storagePath = `${application.id}/${Date.now()}_${safeName}`
 
-        // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('documents')
           .upload(storagePath, file, { upsert: true })
 
         if (uploadError) throw new Error('Storage: ' + uploadError.message)
 
-        // Get public URL
         const { data: urlData } = supabase.storage
           .from('documents')
           .getPublicUrl(storagePath)
 
         const docType = detectDocType(file.name)
 
-        // Insert document record
         const { data: docData, error: insertError } = await supabase
           .from('documents')
           .insert({
@@ -87,7 +85,6 @@ export default function DocumentsTab({ application, lang }) {
 
         if (insertError) throw new Error(insertError.message)
 
-        // Fire n8n webhook (non-blocking)
         fetch(N8N_WEBHOOK, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -138,7 +135,6 @@ export default function DocumentsTab({ application, lang }) {
       }).catch(() => {})
     }
 
-    // Update application status
     await supabase
       .from('applications')
       .update({ status: 'under_review' })
@@ -162,6 +158,23 @@ export default function DocumentsTab({ application, lang }) {
   const handleChangeType = async (doc, newType) => {
     await supabase.from('documents').update({ document_type: newType }).eq('id', doc.id)
     fetchDocuments()
+  }
+
+  const handleViewDoc = (doc) => {
+    const url = doc.file_url || (doc.file_path
+      ? `https://tegpyrhhvxffdteslpdr.supabase.co/storage/v1/object/public/documents/${doc.file_path}`
+      : null)
+    if (url) window.open(url, '_blank')
+  }
+
+  // Extract original file name from storage path
+  const getDisplayName = (doc) => {
+    if (!doc.file_path) return 'document'
+    const fileName = doc.file_path.split('/').pop() || ''
+    // Remove timestamp prefix (digits followed by underscore)
+    const withoutTimestamp = fileName.replace(/^\d+_/, '')
+    // Replace underscores with spaces for readability
+    return withoutTimestamp.replace(/_/g, ' ') || fileName
   }
 
   const completedCount = documents.filter(d => d.ocr_status === 'completed').length
@@ -194,9 +207,6 @@ export default function DocumentsTab({ application, lang }) {
             </p>
             <p className="text-gray-400 text-sm mt-1">
               {lang === 'ar' ? 'يقبل ملفات PDF والصور — يمكن رفع عدة ملفات دفعة واحدة' : 'Accepts PDF and images — multiple files supported'}
-            </p>
-            <p className="text-amber-600 text-xs mt-1 font-medium">
-              {lang === 'ar' ? '✓ يدعم الأسماء بالعربي والمسافات' : '✓ Supports Arabic names and spaces'}
             </p>
           </div>
         </div>
@@ -248,7 +258,7 @@ export default function DocumentsTab({ application, lang }) {
             const typeLabel = DOC_TYPE_LABELS[doc.document_type] || DOC_TYPE_LABELS.other
             const statusCfg = STATUS_CONFIG[doc.ocr_status] || STATUS_CONFIG.pending
             const StatusIcon = statusCfg.icon
-            const displayName = doc.file_path?.split('/').pop()?.replace(/^\d+_/, '').replace(/_/g, ' ') || 'document'
+            const displayName = getDisplayName(doc)
 
             return (
               <div key={doc.id} className="card p-4 flex items-start gap-3">
@@ -273,16 +283,26 @@ export default function DocumentsTab({ application, lang }) {
                       </span>
                     )}
                   </div>
-                  <select
-                    value={doc.document_type}
-                    onChange={e => handleChangeType(doc, e.target.value)}
-                    onClick={e => e.stopPropagation()}
-                    className="mt-2 text-xs border border-gray-200 rounded px-1 py-0.5 text-gray-600 bg-white w-full"
-                  >
-                    {Object.entries(DOC_TYPE_LABELS).map(([key, val]) => (
-                      <option key={key} value={key}>{lang === 'ar' ? val.ar : val.en}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2 mt-2">
+                    <select
+                      value={doc.document_type}
+                      onChange={e => handleChangeType(doc, e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      className="text-xs border border-gray-200 rounded px-1 py-0.5 text-gray-600 bg-white flex-1"
+                    >
+                      {Object.entries(DOC_TYPE_LABELS).map(([key, val]) => (
+                        <option key={key} value={key}>{lang === 'ar' ? val.ar : val.en}</option>
+                      ))}
+                    </select>
+                    {/* View button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleViewDoc(doc) }}
+                      className="text-blue-400 hover:text-blue-600 transition-colors flex-shrink-0 p-1 rounded"
+                      title={lang === 'ar' ? 'عرض المستند' : 'View document'}
+                    >
+                      <Eye size={15} />
+                    </button>
+                  </div>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc) }}
@@ -299,4 +319,3 @@ export default function DocumentsTab({ application, lang }) {
     </div>
   )
 }
-
