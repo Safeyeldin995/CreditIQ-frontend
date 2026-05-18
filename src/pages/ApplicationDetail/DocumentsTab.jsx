@@ -160,11 +160,18 @@ export default function DocumentsTab({ application, lang }) {
     fetchDocuments()
   }
 
-  const handleViewDoc = (doc) => {
-    const url = doc.file_url || (doc.file_path
-      ? `https://tegpyrhhvxffdteslpdr.supabase.co/storage/v1/object/public/documents/${doc.file_path}`
-      : null)
-    if (url) window.open(url, '_blank')
+ const handleViewDoc = (doc) => {
+  const url = doc.file_url
+  if (url) {
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+}
   }
 
   // Extract original file name from storage path
@@ -298,7 +305,7 @@ export default function DocumentsTab({ application, lang }) {
                     </select>
                     {/* View button */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleViewDoc(doc) }}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleViewDoc(doc) }}
                       className="text-blue-400 hover:text-blue-600 transition-colors flex-shrink-0 p-1 rounded"
                       title={lang === 'ar' ? 'عرض المستند' : 'View document'}
                     >
