@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, FilePlus, Briefcase, Settings, LogOut, Globe2 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../supabase'
 
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, ar: 'لوحة التحكم', en: 'Dashboard' },
