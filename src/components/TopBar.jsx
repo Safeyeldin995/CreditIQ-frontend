@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bell, X } from 'lucide-react'
-import { supabase, GRADE_COLORS, formatDate } from '../lib/supabase'
+import { supabase, GRADE_COLORS, formatDate } from '../supabase'
 import { useNavigate } from 'react-router-dom'
 
 export default function TopBar({ title, lang }) {
