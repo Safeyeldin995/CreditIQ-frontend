@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase, STATUS_LABELS, GRADE_COLORS, formatAmount, formatDate } from '../../lib/supabase'
+import { supabase, STATUS_LABELS, GRADE_COLORS, formatAmount, formatDate } from '../../supabase'
 import Layout from '../../components/Layout'
 import DocumentsTab from './DocumentsTab'
 import AnalysisTab from './AnalysisTab'
