@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { supabase } from './lib/supabase'
+import { supabase } from './supabase'
 import { ToastProvider } from './components/Toast'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
