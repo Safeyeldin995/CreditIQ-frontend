@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase, detectDocType, DOC_TYPE_LABELS, N8N_WEBHOOK } from '../../lib/supabase'
+import { supabase, detectDocType, DOC_TYPE_LABELS, N8N_WEBHOOK, N8N_ANALYZE_WEBHOOK } from '../../supabase'
 import { useToast } from '../../components/Toast'
 import { Upload, FileText, CheckCircle, Clock, XCircle, RefreshCw, Zap, Eye } from 'lucide-react'
 
@@ -107,18 +107,15 @@ export default function DocumentsTab({ application, lang }) {
   const handleAnalyzeAll = async () => {
     const completedDocs = documents.filter(d => d.ocr_status === 'completed')
     if (completedDocs.length === 0) return
-    for (const doc of completedDocs) {
-      fetch(N8N_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          application_id: application.id,
-          document_id: doc.id,
-          file_path: doc.file_path,
-          document_type: doc.document_type,
-        }),
-      }).catch(() => {})
-    }
+
+    fetch(N8N_ANALYZE_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        application_id: application.id,
+      }),
+    }).catch(() => {})
+
     await supabase.from('applications').update({ status: 'under_review' }).eq('id', application.id)
     toast(lang === 'ar' ? 'تم إرسال الملفات للتحليل — سيظهر القرار في تبويب التحليل' : 'Files sent for AI analysis', 'success')
   }
