@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase, generateReferenceCode } from '../lib/supabase'
+import { supabase, generateReferenceCode } from '../supabase'
 import Layout from '../components/Layout'
 import { useToast } from '../components/Toast'
 
