@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, formatAmount } from '../../lib/supabase'
+import { supabase, formatAmount } from '../../supabase'
 import { Printer, X } from 'lucide-react'
 
 function calcCheques(amount, tenorMonths, interestRate, adminFee = 0.015) {
