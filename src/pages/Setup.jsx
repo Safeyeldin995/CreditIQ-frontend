@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../supabase'
 import { useToast } from '../components/Toast'
 
 export default function Setup({ lang }) {
