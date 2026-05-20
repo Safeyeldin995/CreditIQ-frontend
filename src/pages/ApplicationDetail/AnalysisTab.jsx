@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { supabase, GRADE_COLORS, formatAmount } from '../../lib/supabase'
+import { supabase, GRADE_COLORS, formatAmount } from '../../supabase'
 import { AlertTriangle, FileX, CheckCircle, RefreshCw, TrendingUp, Shield, DollarSign, Users, Globe, Activity } from 'lucide-react'
 
 const SIX_CS = [
