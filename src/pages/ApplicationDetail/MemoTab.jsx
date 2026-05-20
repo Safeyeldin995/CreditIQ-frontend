@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '../../supabase'
 import { useToast } from '../../components/Toast'
 import { Printer, CheckCircle, XCircle, RefreshCw, FileText } from 'lucide-react'
 
