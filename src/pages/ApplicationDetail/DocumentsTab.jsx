@@ -213,15 +213,6 @@ export default function DocumentsTab({ application, lang }) {
               </span>
             )}
           </div>
-          {completedCount > 0 && (
-            <button onClick={handleAnalyzeAll} className="btn-primary flex items-center gap-2 text-xs py-2">
-              <Zap size={14} />
-              {lang === 'ar' ? 'توليد التحليل الائتماني' : 'Generate AI Analysis'}
-            </button>
-          )}
-        </div>
-      )}
-
       {documents.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           <FileText size={40} className="mx-auto mb-3 opacity-30" />
