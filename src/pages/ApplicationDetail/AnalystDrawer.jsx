@@ -137,62 +137,98 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
     }
   }
 
-  async function loadAIData(){
-    setAiLoading(true)
-    try {
-      const {data:docs}=await supabase.from('documents').select('document_type,extracted_data').eq('application_id',application.id).eq('ocr_status','completed')
-      if(!docs||docs.length===0) return
-      const updates={}
-      docs.forEach(doc=>{
-        let rawText=''
-        const ext=doc.extracted_data
-        if(typeof ext==='string') rawText=ext
-        else if(ext&&typeof ext==='object') rawText=ext.content||ext.text||ext.extracted_text||ext.raw||JSON.stringify(ext)
-        const text=rawText.toLowerCase()
-        if(!text||text==='{}'||text==='""') return
+ async function loadAIData(){
+  setAiLoading(true)
+  try {
+    const {data:docs}=await supabase.from('documents').select('document_type,extracted_data,raw_extraction').eq('application_id',application.id).eq('ocr_status','completed')
+    if(!docs||docs.length===0) return
+    const updates={}
 
-        if(doc.document_type==='iscore_client'){
-          const scoreMatch=text.match(/score[:\s]+(\d{3,4})|درجة[:\s]*(\d{3,4})|(\d{3,4})\s*(نقطة|point)/i)
-          if(scoreMatch) updates.ai_iscore_score=parseInt(scoreMatch[1]||scoreMatch[2]||scoreMatch[3])
-          const gradeMatch=text.match(/grade[:\s]*([a-f])|تصنيف[:\s]*([a-f])/i)
-          if(gradeMatch) updates.ai_iscore_grade=(gradeMatch[1]||gradeMatch[2]).toUpperCase()
-          const loansMatch=text.match(/إجمالي[^0-9]*([\d,]+)|outstanding[^0-9]*([\d,]+)|التزامات[^0-9]*([\d,]+)/i)
-          if(loansMatch) updates.ai_outstanding_loans=parseFloat((loansMatch[1]||loansMatch[2]||loansMatch[3]).replace(/,/g,''))
-          const inquiryMatch=text.match(/استعلام[^0-9]*(\d+)|inquir[^0-9]*(\d+)/i)
-          if(inquiryMatch) updates.ai_inquiries_count=parseInt(inquiryMatch[1]||inquiryMatch[2])
-          if(text.includes('مرتجع')||text.includes('returned')||text.includes('dishonored')) updates.ai_returned_cheques=true
-          if(!updates.ai_iscore_notes) updates.ai_iscore_notes=rawText.slice(0,400)
+    docs.forEach(doc=>{
+      const ext = doc.raw_extraction || {}
+      if(!ext || Object.keys(ext).length === 0) return
+
+      if(ext.iscore_score && !updates.ai_iscore_score) updates.ai_iscore_score = ext.iscore_score
+      if(ext.iscore_grade && !updates.ai_iscore_grade) updates.ai_iscore_grade = ext.iscore_grade
+      if(ext.outstanding_loans_total && !updates.ai_outstanding_loans) updates.ai_outstanding_loans = ext.outstanding_loans_total
+      if(ext.num_inquiries && !updates.ai_inquiries_count) updates.ai_inquiries_count = ext.num_inquiries
+      if(ext.has_returned_cheques) updates.ai_returned_cheques = true
+      if(ext.has_delays) updates.ai_returned_cheques = true
+      if(ext.avg_monthly_balance && !updates.ai_avg_balance) updates.ai_avg_balance = ext.avg_monthly_balance
+      if(ext.monthly_credit_flow && !updates.ai_credit_flow) updates.ai_credit_flow = ext.monthly_credit_flow
+      if(ext.monthly_sales_avg && !updates.ai_monthly_sales) updates.ai_monthly_sales = ext.monthly_sales_avg
+      if(ext.monthly_purchases_avg && !updates.ai_monthly_purchases) updates.ai_monthly_purchases = ext.monthly_purchases_avg
+      if(ext.ecr_total_value && !updates.ai_ecr_value) updates.ai_ecr_value = ext.ecr_total_value
+      if(ext.guarantor1_name && !updates.g1_name) updates.g1_name = ext.guarantor1_name
+      if(ext.guarantor1_age && !updates.g1_age) updates.g1_age = ext.guarantor1_age
+      if(ext.guarantor1_relation && !updates.g1_relation) updates.g1_relation = ext.guarantor1_relation
+      if(ext.guarantor1_job && !updates.g1_job) updates.g1_job = ext.guarantor1_job
+      if(ext.guarantor1_employer && !updates.g1_employer) updates.g1_employer = ext.guarantor1_employer
+      if(ext.guarantor2_name && !updates.g2_name) updates.g2_name = ext.guarantor2_name
+      if(ext.guarantor2_age && !updates.g2_age) updates.g2_age = ext.guarantor2_age
+      if(ext.guarantor2_relation && !updates.g2_relation) updates.g2_relation = ext.guarantor2_relation
+      if(ext.guarantor2_job && !updates.g2_job) updates.g2_job = ext.guarantor2_job
+      if(ext.guarantor2_employer && !updates.g2_employer) updates.g2_employer = ext.guarantor2_employer
+
+      const notes = []
+      if(ext.outstanding_loans_details) notes.push('الالتزامات: ' + ext.outstanding_loans_details)
+      if(ext.delay_details) notes.push('التأخير: ' + ext.delay_details)
+      if(ext.red_flags) notes.push('تنبيه: ' + ext.red_flags)
+      if(notes.length > 0 && doc.document_type === 'iscore_client') updates.ai_iscore_notes = notes.join('\n')
+
+      if(doc.document_type === 'bank_statement_business') {
+        const bankNotes = []
+        if(ext.bank_name) bankNotes.push('البنك: ' + ext.bank_name)
+        if(ext.bank_statement_period) bankNotes.push('الفترة: ' + ext.bank_statement_period)
+        if(ext.bank_total_credit) bankNotes.push('إجمالي الدائن: ' + ext.bank_total_credit)
+        if(ext.monthly_sales_details) bankNotes.push('المبيعات: ' + ext.monthly_sales_details)
+        if(ext.red_flags) bankNotes.push('تنبيه: ' + ext.red_flags)
+        if(bankNotes.length > 0) updates.ai_bank_notes = bankNotes.join('\n')
+      }
+
+      if(doc.document_type === 'credit_study') {
+        const studyNotes = []
+        if(ext.monthly_sales_details) studyNotes.push('المبيعات: ' + ext.monthly_sales_details)
+        if(ext.monthly_purchases_details) studyNotes.push('المشتريات: ' + ext.monthly_purchases_details)
+        if(ext.sales_proof_type) studyNotes.push('إثبات المبيعات: ' + ext.sales_proof_type)
+        if(ext.red_flags) studyNotes.push('تنبيه: ' + ext.red_flags)
+        if(studyNotes.length > 0) updates.ai_study_notes = studyNotes.join('\n')
+      }
+
+      if(doc.document_type === 'field_investigation') {
+        const fieldNotes = []
+        if(ext.activity_type) fieldNotes.push('النشاط: ' + ext.activity_type)
+        if(ext.activity_location) fieldNotes.push('الموقع: ' + ext.activity_location)
+        if(ext.num_employees) fieldNotes.push('العمالة: ' + ext.num_employees)
+        if(ext.capital_specialist) fieldNotes.push('رأس المال (الاخصائي): ' + ext.capital_specialist)
+        if(ext.capital_investigator) fieldNotes.push('رأس المال (المستعلم): ' + ext.capital_investigator)
+        if(ext.red_flags) fieldNotes.push('تنبيه: ' + ext.red_flags)
+        if(fieldNotes.length > 0) updates.ai_field_notes = fieldNotes.join('\n')
+        if(ext.capital_specialist && !updates.capital_specialist) updates.capital_specialist = ext.capital_specialist
+        if(ext.capital_investigator && !updates.capital_investigator) updates.capital_investigator = ext.capital_investigator
+        if(ext.capital_manager && !updates.capital_manager) updates.capital_manager = ext.capital_manager
+        if(ext.num_employees && !updates.employee_count) {
+          const n = parseInt(ext.num_employees)
+          if(n > 10) updates.employee_count = 'أكثر من 10'
+          else if(n > 5) updates.employee_count = '6 إلى 10'
+          else if(n > 0) updates.employee_count = '1 إلى 5'
         }
-        if(doc.document_type==='bank_statement_business'){
-          const balMatch=text.match(/متوسط[^0-9]*([\d,]+)|average[^0-9]*([\d,]+)/i)
-          if(balMatch) updates.ai_avg_balance=parseFloat((balMatch[1]||balMatch[2]).replace(/,/g,''))
-          const flowMatch=text.match(/دائن[^0-9]*([\d,]+)|credit[^0-9]*([\d,]+)/i)
-          if(flowMatch) updates.ai_credit_flow=parseFloat((flowMatch[1]||flowMatch[2]).replace(/,/g,''))
-          if(!updates.ai_bank_notes) updates.ai_bank_notes=rawText.slice(0,400)
-        }
-        if(doc.document_type==='possessory_pledge'){
-          const valMatch=text.match(/قيمة[^0-9]*([\d,]+)|value[^0-9]*([\d,]+)/i)
-          if(valMatch) updates.ai_ecr_value=parseFloat((valMatch[1]||valMatch[2]).replace(/,/g,''))
-        }
-        if(doc.document_type==='credit_study'){
-          const salesMatch=text.match(/مبيعات[^0-9]*([\d,]+)|sales[^0-9]*([\d,]+)/i)
-          if(salesMatch) updates.ai_monthly_sales=parseFloat((salesMatch[1]||salesMatch[2]).replace(/,/g,''))
-          const purchMatch=text.match(/مشتريات[^0-9]*([\d,]+)|purchases[^0-9]*([\d,]+)/i)
-          if(purchMatch) updates.ai_monthly_purchases=parseFloat((purchMatch[1]||purchMatch[2]).replace(/,/g,''))
-          if(!updates.ai_study_notes) updates.ai_study_notes=rawText.slice(0,500)
-        }
-        if(doc.document_type==='field_investigation'){
-          if(!updates.ai_field_notes) updates.ai_field_notes=rawText.slice(0,500)
-        }
-      })
-      setData(p=>({...p,...Object.fromEntries(Object.entries(updates).filter(([k,v])=>{
+      }
+
+      if(doc.document_type === 'possessory_pledge') {
+        if(ext.ecr_items && !updates.ai_bank_notes) updates.ai_bank_notes = 'أصناف الرهن: ' + ext.ecr_items
+      }
+    })
+
+    setData(p=>({...p,...Object.fromEntries(
+      Object.entries(updates).filter(([k,v])=>{
         const cur=p[k]; return cur===''||cur===0||cur===false||cur===null||cur===undefined
-      }))}))
-    } finally {
-      setAiLoading(false)
-    }
+      })
+    )}))
+  } finally {
+    setAiLoading(false)
   }
-
+}
   function calcScores(){
     const char=(data.c_education||0)+(data.c_trust||0)+(data.c_job||0)+(data.c_residence||0)+(data.c_business_stability||0)
     const credit=(data.cr_personal_banks||0)+(data.cr_business_banks||0)+(data.cr_companies||0)+(data.cr_bank_regularity||0)+(data.cr_companies_regularity||0)+(data.cr_current_loans||0)+(data.cr_inquiries||0)
