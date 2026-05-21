@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase, detectDocType, DOC_TYPE_LABELS, N8N_WEBHOOK, N8N_ANALYZE_WEBHOOK } from '../../supabase'
+import { supabase, detectDocType, DOC_TYPE_LABELS, N8N_WEBHOOK } from '../../supabase'
 import { useToast } from '../../components/Toast'
-import { Upload, FileText, CheckCircle, Clock, XCircle, RefreshCw, Zap, Eye } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Clock, XCircle, RefreshCw, Eye } from 'lucide-react'
 
 const STATUS_CONFIG = {
   pending: { label: 'بانتظار المعالجة', labelEn: 'Pending', icon: Clock, color: 'bg-gray-100 text-gray-600' },
@@ -88,7 +88,7 @@ export default function DocumentsTab({ application, lang }) {
         }).catch(() => {})
 
         setUploadProgress(p => ({ ...p, [fileId]: 'done' }))
-        toast(lang === 'ar' ? `تم رفع ${file.name} وبدأ التحليل` : `Uploaded ${file.name} — analysis started`, 'success')
+        toast(lang === 'ar' ? `تم رفع ${file.name} وبدأ الاستخراج` : `Uploaded ${file.name} — extraction started`, 'success')
       } catch (err) {
         setUploadProgress(p => ({ ...p, [fileId]: 'error' }))
         toast(`فشل رفع ${file.name}: ${err.message}`, 'error')
@@ -102,22 +102,6 @@ export default function DocumentsTab({ application, lang }) {
   const handleDrop = (e) => {
     e.preventDefault()
     handleFiles(e.dataTransfer.files)
-  }
-
-  const handleAnalyzeAll = async () => {
-    const completedDocs = documents.filter(d => d.ocr_status === 'completed')
-    if (completedDocs.length === 0) return
-
-    fetch(N8N_ANALYZE_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        application_id: application.id,
-      }),
-    }).catch(() => {})
-
-    await supabase.from('applications').update({ status: 'under_review' }).eq('id', application.id)
-    toast(lang === 'ar' ? 'تم إرسال الملفات للتحليل — سيظهر القرار في تبويب التحليل' : 'Files sent for AI analysis', 'success')
   }
 
   const handleDeleteDoc = async (doc) => {
@@ -203,7 +187,7 @@ export default function DocumentsTab({ application, lang }) {
             </span>
             {completedCount > 0 && (
               <span className="text-emerald-600 font-semibold">
-                {lang === 'ar' ? `${completedCount} تم تحليله` : `${completedCount} analyzed`}
+                {lang === 'ar' ? `${completedCount} تم استخراجه` : `${completedCount} extracted`}
               </span>
             )}
             {processingCount > 0 && (
@@ -213,6 +197,9 @@ export default function DocumentsTab({ application, lang }) {
               </span>
             )}
           </div>
+        </div>
+      )}
+
       {documents.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           <FileText size={40} className="mx-auto mb-3 opacity-30" />
