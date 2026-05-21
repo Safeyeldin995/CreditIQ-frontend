@@ -57,6 +57,7 @@ const FIVE_CS_ITEMS = {
     { key: 'cond_legal', label: 'الوضع القانوني', max: 3, options: [{label:'مرخص بالكامل',val:3},{label:'مرخص جزئياً',val:1.5},{label:'قيد الاستخراج',val:0.5},{label:'غير مرخص',val:0}] },
   ]},
 }
+
 const SECTIONS = [
   {id:'ai',label:'البيانات المستخرجة'},
   {id:'visit',label:'الزيارة الميدانية'},
@@ -76,9 +77,11 @@ function Sel({value,onChange,options,placeholder='اختر...'}){
     {options.map(o=>(<option key={typeof o==='string'?o:o.value} value={typeof o==='string'?o:o.value}>{typeof o==='string'?o:o.label}</option>))}
   </select>)
 }
+
 function Inp({value,onChange,type='text',placeholder=''}){
   return(<input type={type} value={value||''} placeholder={placeholder} onChange={e=>onChange(type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400"/>)
 }
+
 function Toggle({label,value,onChange}){
   return(<div className="flex items-center justify-between py-2">
     <span className="text-sm text-gray-700">{label}</span>
@@ -109,6 +112,8 @@ const INIT = {
   ai_inquiries_count:'',ai_credit_flow:'',
 }
 
+const n = (v) => v === '' || v === null || v === undefined ? null : Number(v) || null
+
 export default function AnalystDrawer({application,lang,onClose,onSaved}){
   const [data,setData]=useState(INIT)
   const [saving,setSaving]=useState(false)
@@ -136,88 +141,53 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
     setAiLoading(true)
     try {
       const {data:docs}=await supabase.from('documents').select('document_type,extracted_data').eq('application_id',application.id).eq('ocr_status','completed')
-      if(!docs || docs.length === 0) return
+      if(!docs||docs.length===0) return
+      const updates={}
+      docs.forEach(doc=>{
+        let rawText=''
+        const ext=doc.extracted_data
+        if(typeof ext==='string') rawText=ext
+        else if(ext&&typeof ext==='object') rawText=ext.content||ext.text||ext.extracted_text||ext.raw||JSON.stringify(ext)
+        const text=rawText.toLowerCase()
+        if(!text||text==='{}'||text==='""') return
 
-      const updates = {}
-
-      docs.forEach(doc => {
-        // Handle both string and object extracted_data from Azure OCR
-        let rawText = ''
-        const ext = doc.extracted_data
-        if (typeof ext === 'string') {
-          rawText = ext
-        } else if (ext && typeof ext === 'object') {
-          rawText = ext.content || ext.text || ext.extracted_text || ext.raw || JSON.stringify(ext)
+        if(doc.document_type==='iscore_client'){
+          const scoreMatch=text.match(/score[:\s]+(\d{3,4})|درجة[:\s]*(\d{3,4})|(\d{3,4})\s*(نقطة|point)/i)
+          if(scoreMatch) updates.ai_iscore_score=parseInt(scoreMatch[1]||scoreMatch[2]||scoreMatch[3])
+          const gradeMatch=text.match(/grade[:\s]*([a-f])|تصنيف[:\s]*([a-f])/i)
+          if(gradeMatch) updates.ai_iscore_grade=(gradeMatch[1]||gradeMatch[2]).toUpperCase()
+          const loansMatch=text.match(/إجمالي[^0-9]*([\d,]+)|outstanding[^0-9]*([\d,]+)|التزامات[^0-9]*([\d,]+)/i)
+          if(loansMatch) updates.ai_outstanding_loans=parseFloat((loansMatch[1]||loansMatch[2]||loansMatch[3]).replace(/,/g,''))
+          const inquiryMatch=text.match(/استعلام[^0-9]*(\d+)|inquir[^0-9]*(\d+)/i)
+          if(inquiryMatch) updates.ai_inquiries_count=parseInt(inquiryMatch[1]||inquiryMatch[2])
+          if(text.includes('مرتجع')||text.includes('returned')||text.includes('dishonored')) updates.ai_returned_cheques=true
+          if(!updates.ai_iscore_notes) updates.ai_iscore_notes=rawText.slice(0,400)
         }
-        const text = rawText.toLowerCase()
-        if (!text || text === '{}' || text === '""') return
-
-        if(doc.document_type === 'iscore_client'){
-          // Extract iScore numeric score
-          const scoreMatch = text.match(/score[:\s]+(\d{3,4})|درجة[:\s]*(\d{3,4})|(\d{3,4})\s*(نقطة|point)/i)
-          if(scoreMatch) updates.ai_iscore_score = parseInt(scoreMatch[1]||scoreMatch[2]||scoreMatch[3])
-
-          // Extract grade
-          const gradeMatch = text.match(/grade[:\s]*([a-f])|تصنيف[:\s]*([a-f])/i)
-          if(gradeMatch) updates.ai_iscore_grade = (gradeMatch[1]||gradeMatch[2]).toUpperCase()
-
-          // Extract outstanding loans
-          const loansMatch = text.match(/إجمالي[^0-9]*([\d,]+)|outstanding[^0-9]*([\d,]+)|التزامات[^0-9]*([\d,]+)/i)
-          if(loansMatch) updates.ai_outstanding_loans = parseFloat((loansMatch[1]||loansMatch[2]||loansMatch[3]).replace(/,/g,''))
-
-          // Extract inquiry count
-          const inquiryMatch = text.match(/استعلام[^0-9]*(\d+)|inquir[^0-9]*(\d+)/i)
-          if(inquiryMatch) updates.ai_inquiries_count = parseInt(inquiryMatch[1]||inquiryMatch[2])
-
-          // Check for returned cheques
-          if(text.includes('مرتجع') || text.includes('returned') || text.includes('dishonored') || text.includes('شيك مرتجع')) updates.ai_returned_cheques = true
-
-          if(!updates.ai_iscore_notes) updates.ai_iscore_notes = rawText.slice(0, 400)
+        if(doc.document_type==='bank_statement_business'){
+          const balMatch=text.match(/متوسط[^0-9]*([\d,]+)|average[^0-9]*([\d,]+)/i)
+          if(balMatch) updates.ai_avg_balance=parseFloat((balMatch[1]||balMatch[2]).replace(/,/g,''))
+          const flowMatch=text.match(/دائن[^0-9]*([\d,]+)|credit[^0-9]*([\d,]+)/i)
+          if(flowMatch) updates.ai_credit_flow=parseFloat((flowMatch[1]||flowMatch[2]).replace(/,/g,''))
+          if(!updates.ai_bank_notes) updates.ai_bank_notes=rawText.slice(0,400)
         }
-
-        if(doc.document_type === 'bank_statement_business'){
-          // Extract average balance
-          const balMatch = text.match(/متوسط[^0-9]*([\d,]+)|average[^0-9]*([\d,]+)|رصيد متوسط[^0-9]*([\d,]+)/i)
-          if(balMatch) updates.ai_avg_balance = parseFloat((balMatch[1]||balMatch[2]||balMatch[3]).replace(/,/g,''))
-
-          // Extract credit flow
-          const flowMatch = text.match(/دائن[^0-9]*([\d,]+)|credit[^0-9]*([\d,]+)|تدفق[^0-9]*([\d,]+)/i)
-          if(flowMatch) updates.ai_credit_flow = parseFloat((flowMatch[1]||flowMatch[2]||flowMatch[3]).replace(/,/g,''))
-
-          if(!updates.ai_bank_notes) updates.ai_bank_notes = rawText.slice(0, 400)
+        if(doc.document_type==='possessory_pledge'){
+          const valMatch=text.match(/قيمة[^0-9]*([\d,]+)|value[^0-9]*([\d,]+)/i)
+          if(valMatch) updates.ai_ecr_value=parseFloat((valMatch[1]||valMatch[2]).replace(/,/g,''))
         }
-
-        if(doc.document_type === 'possessory_pledge'){
-          const valMatch = text.match(/قيمة[^0-9]*([\d,]+)|value[^0-9]*([\d,]+)|([\d,]+)\s*جنيه/i)
-          if(valMatch) updates.ai_ecr_value = parseFloat((valMatch[1]||valMatch[2]||valMatch[3]).replace(/,/g,''))
+        if(doc.document_type==='credit_study'){
+          const salesMatch=text.match(/مبيعات[^0-9]*([\d,]+)|sales[^0-9]*([\d,]+)/i)
+          if(salesMatch) updates.ai_monthly_sales=parseFloat((salesMatch[1]||salesMatch[2]).replace(/,/g,''))
+          const purchMatch=text.match(/مشتريات[^0-9]*([\d,]+)|purchases[^0-9]*([\d,]+)/i)
+          if(purchMatch) updates.ai_monthly_purchases=parseFloat((purchMatch[1]||purchMatch[2]).replace(/,/g,''))
+          if(!updates.ai_study_notes) updates.ai_study_notes=rawText.slice(0,500)
         }
-
-        if(doc.document_type === 'credit_study'){
-          const salesMatch = text.match(/مبيعات[^0-9]*([\d,]+)|sales[^0-9]*([\d,]+)/i)
-          if(salesMatch) updates.ai_monthly_sales = parseFloat((salesMatch[1]||salesMatch[2]).replace(/,/g,''))
-          const purchMatch = text.match(/مشتريات[^0-9]*([\d,]+)|purchases[^0-9]*([\d,]+)/i)
-          if(purchMatch) updates.ai_monthly_purchases = parseFloat((purchMatch[1]||purchMatch[2]).replace(/,/g,''))
-          if(!updates.ai_study_notes) updates.ai_study_notes = rawText.slice(0, 500)
-        }
-
-        if(doc.document_type === 'field_investigation'){
-          if(!updates.ai_field_notes) updates.ai_field_notes = rawText.slice(0, 500)
-        }
-
-        // Extract guarantor names from any doc
-        if(!updates.g1_name) {
-          const g1Match = rawText.match(/ضامن[^:：\n]*[:：]\s*([^\n]{3,30})|guarantor[^:：\n]*[:：]\s*([^\n]{3,30})/i)
-          if(g1Match) updates.g1_name = (g1Match[1]||g1Match[2]).trim()
+        if(doc.document_type==='field_investigation'){
+          if(!updates.ai_field_notes) updates.ai_field_notes=rawText.slice(0,500)
         }
       })
-
-      // Only fill empty fields — don't overwrite what analyst already entered
-      setData(p=>({...p, ...Object.fromEntries(
-        Object.entries(updates).filter(([k,v])=> {
-          const current = p[k]
-          return current === '' || current === 0 || current === false || current === null || current === undefined
-        })
-      )}))
+      setData(p=>({...p,...Object.fromEntries(Object.entries(updates).filter(([k,v])=>{
+        const cur=p[k]; return cur===''||cur===0||cur===false||cur===null||cur===undefined
+      }))}))
     } finally {
       setAiLoading(false)
     }
@@ -247,43 +217,92 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
     const scores=calcScores()
     const five_cs_details={}
     Object.values(FIVE_CS_ITEMS).forEach(c=>c.items.forEach(i=>{five_cs_details[i.key]=data[i.key]||0}))
+
     const payload={
-      application_id:application.id,
-      operation_rating:data.operation_rating,employee_count:data.employee_count,legal_status:data.legal_status,
-      business_ownership:data.business_ownership,residence_ownership:data.residence_ownership,
-      has_tools:data.has_tools,has_leverage:data.has_leverage,
-      sales_specialist:data.sales_specialist,sales_investigator:data.sales_investigator,sales_manager:data.sales_manager,
-      sales_proof:data.sales_proof,purchases_proof:data.purchases_proof,monthly_expenses:data.monthly_expenses,
-      capital_specialist:data.capital_specialist,capital_investigator:data.capital_investigator,capital_manager:data.capital_manager,
-      g1_name:data.g1_name,g1_age:data.g1_age,g1_relation:data.g1_relation,g1_job:data.g1_job,g1_employer:data.g1_employer,g1_residence:data.g1_residence,g1_has_debts:data.g1_has_debts,
-      g2_name:data.g2_name,g2_age:data.g2_age,g2_relation:data.g2_relation,g2_job:data.g2_job,g2_employer:data.g2_employer,g2_residence:data.g2_residence,g2_has_debts:data.g2_has_debts,
-      client_called:data.client_called,client_call_result:data.client_call_result,client_call_notes:data.client_call_notes,
-      g1_called:data.g1_called,g1_call_result:data.g1_call_result,g1_call_notes:data.g1_call_notes,
-      g2_called:data.g2_called,g2_call_result:data.g2_call_result,g2_call_notes:data.g2_call_notes,
-      suppliers_called:data.suppliers_called,suppliers_notes:data.suppliers_notes,
+      application_id: application.id,
+      operation_rating: data.operation_rating||null,
+      employee_count: data.employee_count||null,
+      legal_status: data.legal_status||null,
+      business_ownership: data.business_ownership||null,
+      residence_ownership: data.residence_ownership||null,
+      has_tools: data.has_tools,
+      has_leverage: data.has_leverage,
+      sales_specialist: n(data.sales_specialist),
+      sales_investigator: n(data.sales_investigator),
+      sales_manager: n(data.sales_manager),
+      sales_proof: data.sales_proof||null,
+      purchases_proof: data.purchases_proof||null,
+      monthly_expenses: n(data.monthly_expenses),
+      capital_specialist: n(data.capital_specialist),
+      capital_investigator: n(data.capital_investigator),
+      capital_manager: n(data.capital_manager),
+      g1_name: data.g1_name||null,
+      g1_age: n(data.g1_age),
+      g1_relation: data.g1_relation||null,
+      g1_job: data.g1_job||null,
+      g1_employer: data.g1_employer||null,
+      g1_residence: data.g1_residence||null,
+      g1_has_debts: data.g1_has_debts,
+      g2_name: data.g2_name||null,
+      g2_age: n(data.g2_age),
+      g2_relation: data.g2_relation||null,
+      g2_job: data.g2_job||null,
+      g2_employer: data.g2_employer||null,
+      g2_residence: data.g2_residence||null,
+      g2_has_debts: data.g2_has_debts,
+      client_called: data.client_called,
+      client_call_result: data.client_call_result||null,
+      client_call_notes: data.client_call_notes||null,
+      g1_called: data.g1_called,
+      g1_call_result: data.g1_call_result||null,
+      g1_call_notes: data.g1_call_notes||null,
+      g2_called: data.g2_called,
+      g2_call_result: data.g2_call_result||null,
+      g2_call_notes: data.g2_call_notes||null,
+      suppliers_called: data.suppliers_called,
+      suppliers_notes: data.suppliers_notes||null,
       five_cs_details,
-      score_character:scores.char,score_credit_history:scores.credit,score_collateral:scores.col,score_capital:scores.cap,score_conditions:scores.cond,total_score:scores.total,
-      ai_iscore_grade:data.ai_iscore_grade,ai_iscore_score:data.ai_iscore_score,ai_outstanding_loans:data.ai_outstanding_loans,
-      ai_avg_balance:data.ai_avg_balance,ai_returned_cheques:data.ai_returned_cheques,ai_ecr_value:data.ai_ecr_value,
-      ai_monthly_sales:data.ai_monthly_sales,ai_monthly_purchases:data.ai_monthly_purchases,
-      analyst_decision:data.analyst_decision,analyst_name:data.analyst_name,analyst_notes:data.analyst_notes,
-      collaterals:data.collaterals.join(','),fulfillments:data.fulfillments.join('||'),
-      recommended_amount:data.recommended_amount||autoAmount(scores.total),
-      updated_at:new Date().toISOString(),
+      score_character: scores.char,
+      score_credit_history: scores.credit,
+      score_collateral: scores.col,
+      score_capital: scores.cap,
+      score_conditions: scores.cond,
+      total_score: scores.total,
+      ai_iscore_grade: data.ai_iscore_grade||null,
+      ai_iscore_score: n(data.ai_iscore_score),
+      ai_outstanding_loans: n(data.ai_outstanding_loans),
+      ai_avg_balance: n(data.ai_avg_balance),
+      ai_returned_cheques: data.ai_returned_cheques,
+      ai_ecr_value: n(data.ai_ecr_value),
+      ai_monthly_sales: n(data.ai_monthly_sales),
+      ai_monthly_purchases: n(data.ai_monthly_purchases),
+      analyst_decision: data.analyst_decision||null,
+      analyst_name: data.analyst_name||null,
+      analyst_notes: data.analyst_notes||null,
+      collaterals: data.collaterals.join(','),
+      fulfillments: data.fulfillments.join('||'),
+      recommended_amount: n(data.recommended_amount)||autoAmount(scores.total)||null,
+      updated_at: new Date().toISOString(),
     }
+
     let error
-    if(existingId){const res=await supabase.from('analyst_assessments').update(payload).eq('id',existingId);error=res.error}
-    else{const res=await supabase.from('analyst_assessments').insert(payload).select().single();error=res.error;if(res.data)setExistingId(res.data.id)}
+    if(existingId){
+      const res=await supabase.from('analyst_assessments').update(payload).eq('id',existingId)
+      error=res.error
+    } else {
+      const res=await supabase.from('analyst_assessments').insert(payload).select().single()
+      error=res.error
+      if(res.data) setExistingId(res.data.id)
+    }
 
     if(error){
       toast('خطأ: '+error.message,'error')
     } else {
-      // Trigger AI analysis after saving
-      fetch(N8N_ANALYZE_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ application_id: application.id }),
-      }).catch(() => {})
+      fetch(N8N_ANALYZE_WEBHOOK,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({application_id:application.id}),
+      }).catch(()=>{})
       toast('تم حفظ التقييم وبدأ توليد جواب المخاطر — تحقق من تبويب جواب المخاطر بعد قليل ✓','success')
       onSaved?.()
     }
@@ -333,12 +352,12 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
           <div id="section-ai">
             <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">البيانات المستخرجة بالذكاء الاصطناعي — قابلة للتعديل</h2>
             <Card>
-              {aiLoading ? (
+              {aiLoading?(
                 <div className="flex items-center gap-2 text-blue-600 py-4 justify-center">
                   <Loader size={16} className="animate-spin"/>
                   <span className="text-sm">جاري استخراج البيانات من المستندات...</span>
                 </div>
-              ) : (
+              ):(
                 <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 mb-4 font-semibold">هذه البيانات استخرجها الذكاء الاصطناعي من المستندات المرفوعة. راجعها وعدّل ما يلزم قبل الحفظ.</p>
               )}
               <h4 className="text-sm font-bold text-navy-700 mb-3 border-b pb-2">من الايسكور</h4>
