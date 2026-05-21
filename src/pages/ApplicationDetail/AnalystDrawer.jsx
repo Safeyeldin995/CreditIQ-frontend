@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../supabase'
+import { supabase, N8N_ANALYZE_WEBHOOK } from '../../supabase'
 import { useToast } from '../../components/Toast'
-import { Save, ChevronLeft } from 'lucide-react'
+import { Save, ChevronLeft, Loader } from 'lucide-react'
 
 const RELATIONS = ['زوجة', 'زوج', 'أخ', 'أخت', 'ابن', 'ابنة', 'صديق', 'شريك', 'جار', 'أخرى']
 const JOBS = ['موظف حكومي', 'موظف قطاع خاص', 'عمل حر / تجارة', 'مهنة حرة', 'معلم / مدرس', 'طبيب', 'محاسب', 'مهندس', 'بدون عمل', 'متقاعد', 'أخرى']
@@ -62,14 +62,13 @@ const SECTIONS = [
   {id:'visit',label:'الزيارة الميدانية'},
   {id:'guarantors',label:'الضامنون'},
   {id:'calls',label:'المكالمات'},
-    {id:'fivecs',label:'تقييم الجدارة'},
+  {id:'fivecs',label:'تقييم الجدارة'},
   {id:'decision',label:'القرار النهائي'},
 ]
 
 function Row({label,children}){return(<div><label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>{children}</div>)}
 function G2({children}){return(<div className="grid grid-cols-2 gap-3">{children}</div>)}
 function Card({children}){return(<div className="bg-white rounded-xl border border-gray-100 p-5 mb-4 shadow-sm">{children}</div>)}
-function STitle({id,label}){return(<h2 id={"section-"+id} className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4 scroll-mt-24">{label}</h2>)}
 
 function Sel({value,onChange,options,placeholder='اختر...'}){
   return(<select value={value||''} onChange={e=>onChange(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-400">
@@ -115,6 +114,7 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
   const [saving,setSaving]=useState(false)
   const [existingId,setExistingId]=useState(null)
   const [activeSection,setActiveSection]=useState('ai')
+  const [aiLoading,setAiLoading]=useState(false)
   const toast=useToast()
   const set=(k,v)=>setData(p=>({...p,[k]:v}))
 
@@ -133,76 +133,94 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
   }
 
   async function loadAIData(){
-    // Load from risk_decision
-    const {data:rd}=await supabase.from('risk_decision').select('*').eq('application_id',application.id).order('generated_at',{ascending:false}).limit(1).maybeSingle()
-    
-    // Load from documents extracted_data
-    const {data:docs}=await supabase.from('documents').select('document_type,extracted_data').eq('application_id',application.id).eq('ocr_status','completed')
-    
-    if(!rd && !docs) return
-    
-    const updates = {}
-    
-    // From risk_decision
-    if(rd){
-      updates.ai_iscore_grade = rd.risk_grade || ''
-      updates.ai_iscore_score = rd.risk_score || 0
-      // Try to get more from six_cs_scores
-      try {
-        const six = typeof rd.six_cs_scores === 'string' ? JSON.parse(rd.six_cs_scores||'{}') : (rd.six_cs_scores||{})
-        if(six.capacity?.findings) updates.ai_field_notes = six.capacity.findings
-        if(six.character?.findings) updates.ai_iscore_notes = (updates.ai_iscore_notes||'') + six.character.findings
-      } catch(e){}
-      if(rd.recommended_amount) updates.ai_recommended = rd.recommended_amount
-    }
-    
-    // From documents extracted_data
-    if(docs){
+    setAiLoading(true)
+    try {
+      const {data:docs}=await supabase.from('documents').select('document_type,extracted_data').eq('application_id',application.id).eq('ocr_status','completed')
+      if(!docs || docs.length === 0) return
+
+      const updates = {}
+
       docs.forEach(doc => {
-        const ext = doc.extracted_data || {}
-        const text = (ext.text || ext.content || ext.raw || '').toLowerCase()
-        
+        // Handle both string and object extracted_data from Azure OCR
+        let rawText = ''
+        const ext = doc.extracted_data
+        if (typeof ext === 'string') {
+          rawText = ext
+        } else if (ext && typeof ext === 'object') {
+          rawText = ext.content || ext.text || ext.extracted_text || ext.raw || JSON.stringify(ext)
+        }
+        const text = rawText.toLowerCase()
+        if (!text || text === '{}' || text === '""') return
+
         if(doc.document_type === 'iscore_client'){
-          // Try to extract iscore score from text
-          const scoreMatch = text.match(/score[:\s]+(\d+)|درجة[:\s]+(\d+)|(\d{3,4})\s*(نقطة|point)/i)
+          // Extract iScore numeric score
+          const scoreMatch = text.match(/score[:\s]+(\d{3,4})|درجة[:\s]*(\d{3,4})|(\d{3,4})\s*(نقطة|point)/i)
           if(scoreMatch) updates.ai_iscore_score = parseInt(scoreMatch[1]||scoreMatch[2]||scoreMatch[3])
-          
+
+          // Extract grade
+          const gradeMatch = text.match(/grade[:\s]*([a-f])|تصنيف[:\s]*([a-f])/i)
+          if(gradeMatch) updates.ai_iscore_grade = (gradeMatch[1]||gradeMatch[2]).toUpperCase()
+
           // Extract outstanding loans
-          const loansMatch = text.match(/إجمالي[:\s]+([\d,]+)|total[:\s]+([\d,]+)/i)
-          if(loansMatch) updates.ai_outstanding_loans = parseFloat((loansMatch[1]||loansMatch[2]).replace(/,/g,''))
-          
+          const loansMatch = text.match(/إجمالي[^0-9]*([\d,]+)|outstanding[^0-9]*([\d,]+)|التزامات[^0-9]*([\d,]+)/i)
+          if(loansMatch) updates.ai_outstanding_loans = parseFloat((loansMatch[1]||loansMatch[2]||loansMatch[3]).replace(/,/g,''))
+
+          // Extract inquiry count
+          const inquiryMatch = text.match(/استعلام[^0-9]*(\d+)|inquir[^0-9]*(\d+)/i)
+          if(inquiryMatch) updates.ai_inquiries_count = parseInt(inquiryMatch[1]||inquiryMatch[2])
+
           // Check for returned cheques
-          if(text.includes('مرتجع') || text.includes('returned') || text.includes('dishonored')) updates.ai_returned_cheques = true
-          
-          updates.ai_iscore_notes = (updates.ai_iscore_notes||'') + (ext.summary || ext.text || '').slice(0,300)
+          if(text.includes('مرتجع') || text.includes('returned') || text.includes('dishonored') || text.includes('شيك مرتجع')) updates.ai_returned_cheques = true
+
+          if(!updates.ai_iscore_notes) updates.ai_iscore_notes = rawText.slice(0, 400)
         }
-        
+
         if(doc.document_type === 'bank_statement_business'){
-          const balMatch = text.match(/متوسط[:\s]+([\d,]+)|average[:\s]+([\d,]+)/i)
-          if(balMatch) updates.ai_avg_balance = parseFloat((balMatch[1]||balMatch[2]).replace(/,/g,''))
-          updates.ai_bank_notes = (ext.summary || ext.text || '').slice(0,300)
+          // Extract average balance
+          const balMatch = text.match(/متوسط[^0-9]*([\d,]+)|average[^0-9]*([\d,]+)|رصيد متوسط[^0-9]*([\d,]+)/i)
+          if(balMatch) updates.ai_avg_balance = parseFloat((balMatch[1]||balMatch[2]||balMatch[3]).replace(/,/g,''))
+
+          // Extract credit flow
+          const flowMatch = text.match(/دائن[^0-9]*([\d,]+)|credit[^0-9]*([\d,]+)|تدفق[^0-9]*([\d,]+)/i)
+          if(flowMatch) updates.ai_credit_flow = parseFloat((flowMatch[1]||flowMatch[2]||flowMatch[3]).replace(/,/g,''))
+
+          if(!updates.ai_bank_notes) updates.ai_bank_notes = rawText.slice(0, 400)
         }
-        
-        if(doc.document_type === 'possessory_pledge' || doc.document_type === 'ecr'){
-          const valMatch = text.match(/قيمة[:\s]+([\d,]+)|value[:\s]+([\d,]+)|([\d,]+)\s*جنيه/i)
+
+        if(doc.document_type === 'possessory_pledge'){
+          const valMatch = text.match(/قيمة[^0-9]*([\d,]+)|value[^0-9]*([\d,]+)|([\d,]+)\s*جنيه/i)
           if(valMatch) updates.ai_ecr_value = parseFloat((valMatch[1]||valMatch[2]||valMatch[3]).replace(/,/g,''))
         }
-        
+
         if(doc.document_type === 'credit_study'){
-          const salesMatch = text.match(/مبيعات[:\s]+([\d,]+)|sales[:\s]+([\d,]+)/i)
+          const salesMatch = text.match(/مبيعات[^0-9]*([\d,]+)|sales[^0-9]*([\d,]+)/i)
           if(salesMatch) updates.ai_monthly_sales = parseFloat((salesMatch[1]||salesMatch[2]).replace(/,/g,''))
-          const purchMatch = text.match(/مشتريات[:\s]+([\d,]+)|purchases[:\s]+([\d,]+)/i)
+          const purchMatch = text.match(/مشتريات[^0-9]*([\d,]+)|purchases[^0-9]*([\d,]+)/i)
           if(purchMatch) updates.ai_monthly_purchases = parseFloat((purchMatch[1]||purchMatch[2]).replace(/,/g,''))
-          updates.ai_study_notes = (ext.summary || ext.text || '').slice(0,500)
+          if(!updates.ai_study_notes) updates.ai_study_notes = rawText.slice(0, 500)
         }
-        
+
         if(doc.document_type === 'field_investigation'){
-          updates.ai_field_notes = (ext.summary || ext.text || '').slice(0,500)
+          if(!updates.ai_field_notes) updates.ai_field_notes = rawText.slice(0, 500)
+        }
+
+        // Extract guarantor names from any doc
+        if(!updates.g1_name) {
+          const g1Match = rawText.match(/ضامن[^:：\n]*[:：]\s*([^\n]{3,30})|guarantor[^:：\n]*[:：]\s*([^\n]{3,30})/i)
+          if(g1Match) updates.g1_name = (g1Match[1]||g1Match[2]).trim()
         }
       })
+
+      // Only fill empty fields — don't overwrite what analyst already entered
+      setData(p=>({...p, ...Object.fromEntries(
+        Object.entries(updates).filter(([k,v])=> {
+          const current = p[k]
+          return current === '' || current === 0 || current === false || current === null || current === undefined
+        })
+      )}))
+    } finally {
+      setAiLoading(false)
     }
-    
-    setData(p=>({...p, ...Object.fromEntries(Object.entries(updates).filter(([k,v])=>!p[k]||p[k]===''||p[k]===0||p[k]===false))}))
   }
 
   function calcScores(){
@@ -256,8 +274,19 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
     let error
     if(existingId){const res=await supabase.from('analyst_assessments').update(payload).eq('id',existingId);error=res.error}
     else{const res=await supabase.from('analyst_assessments').insert(payload).select().single();error=res.error;if(res.data)setExistingId(res.data.id)}
-    if(error)toast('خطأ: '+error.message,'error')
-    else{toast('تم حفظ التقييم ✓','success');onSaved?.()}
+
+    if(error){
+      toast('خطأ: '+error.message,'error')
+    } else {
+      // Trigger AI analysis after saving
+      fetch(N8N_ANALYZE_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application_id: application.id }),
+      }).catch(() => {})
+      toast('تم حفظ التقييم وبدأ توليد جواب المخاطر — تحقق من تبويب جواب المخاطر بعد قليل ✓','success')
+      onSaved?.()
+    }
     setSaving(false)
   }
 
@@ -275,7 +304,7 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
         <div className="flex items-center gap-3">
           <span className={`text-sm font-bold ${scoreColor}`}>الإجمالي: {scores.total.toFixed(1)} — {scoreLabel}</span>
           <button onClick={handleSave} disabled={saving} className="bg-gold-500 hover:bg-gold-600 text-navy-950 font-bold px-4 py-2 rounded-lg flex items-center gap-2 text-sm">
-            <Save size={14}/>{saving?'جاري الحفظ...':'حفظ التقييم'}
+            <Save size={14}/>{saving?'جاري الحفظ والتحليل...':'حفظ وتوليد التحليل'}
           </button>
         </div>
       </div>
@@ -304,7 +333,14 @@ export default function AnalystDrawer({application,lang,onClose,onSaved}){
           <div id="section-ai">
             <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">البيانات المستخرجة بالذكاء الاصطناعي — قابلة للتعديل</h2>
             <Card>
-              <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 mb-4 font-semibold">هذه البيانات استخرجها الذكاء الاصطناعي من المستندات المرفوعة. راجعها وعدّل ما يلزم قبل الحفظ.</p>
+              {aiLoading ? (
+                <div className="flex items-center gap-2 text-blue-600 py-4 justify-center">
+                  <Loader size={16} className="animate-spin"/>
+                  <span className="text-sm">جاري استخراج البيانات من المستندات...</span>
+                </div>
+              ) : (
+                <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 mb-4 font-semibold">هذه البيانات استخرجها الذكاء الاصطناعي من المستندات المرفوعة. راجعها وعدّل ما يلزم قبل الحفظ.</p>
+              )}
               <h4 className="text-sm font-bold text-navy-700 mb-3 border-b pb-2">من الايسكور</h4>
               <G2>
                 <Row label="التصنيف الائتماني (A-F)"><Inp value={data.ai_iscore_grade} onChange={v=>set('ai_iscore_grade',v)} placeholder="A"/></Row>
