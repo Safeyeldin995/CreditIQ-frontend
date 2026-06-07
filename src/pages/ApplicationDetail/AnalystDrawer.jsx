@@ -4,7 +4,6 @@ import { useToast } from '../../components/Toast'
 import { Save, ChevronLeft, Plus, Trash2 } from 'lucide-react'
 
 const RELATIONS = ['زوجة', 'زوج', 'أخ', 'أخت', 'ابن', 'ابنة', 'صديق', 'شريك', 'جار', 'أخرى']
-const JOBS = ['موظف حكومي', 'موظف قطاع خاص', 'عمل حر / تجارة', 'مهنة حرة', 'معلم / مدرس', 'طبيب', 'محاسب', 'مهندس', 'بدون عمل', 'متقاعد', 'أخرى']
 const CALL_RESULTS = ['إيجابي', 'سلبي', 'لم يرد', 'وعد بالإعادة', 'رفض التحدث']
 const DECISIONS = ['موافقة', 'موافقة بشروط', 'رفض', 'إحالة للجنة']
 const COLLATERAL_OPTIONS = ['شيكات بنكية', 'شيكات بريدية', 'رهن حيازي', 'رهن عقاري', 'كفيل شخصي', 'عباءات مالية']
@@ -20,6 +19,7 @@ const FIXED_FULFILLMENTS = [
   'كتابة اسم الشركات المنتجة للبضاعة الموجودة بالكشف',
   'عمل رهن بسجل الضمانات المنقولة وفقاً لملحق عقد الضمان',
 ]
+
 const FIVE_CS_ITEMS = {
   character: { label: 'شخصية العميل', max: 5, items: [
     { key: 'c_education', label: 'المؤهل الدراسي', max: 1, options: [{label:'مؤهل عالي',val:1},{label:'مؤهل متوسط',val:0.5},{label:'بدون مؤهل',val:0}] },
@@ -40,8 +40,8 @@ const FIVE_CS_ITEMS = {
   collateral: { label: 'الضمانات', max: 4.5, items: [
     { key: 'col_guarantors', label: 'ضمان أفراد', max: 1, options: [{label:'ضامن مليء بوظيفة ثابتة',val:1},{label:'ضامن بعمل حر',val:0.5},{label:'لا يوجد',val:0}] },
     { key: 'col_ecr', label: 'رهن حيازي أول يد', max: 1, options: [{label:'يوجد بقيمة كافية',val:1},{label:'يوجد بقيمة جزئية',val:0.5},{label:'لا يوجد',val:0}] },
-    { key: 'col_bank_cheques', label: 'شيكات بنكية / بريدية للعميل', max: 1, options: [{label:'يوجد',val:1},{label:'جزئي',val:0.5},{label:'لا يوجد',val:0}] },
-    { key: 'col_guarantee_cheques', label: 'شيكات ضمان بنكي / بريدي', max: 0.5, options: [{label:'يوجد',val:0.5},{label:'لا يوجد',val:0}] },
+    { key: 'col_bank_cheques', label: 'شيكات بنكية / بريدية', max: 1, options: [{label:'يوجد',val:1},{label:'جزئي',val:0.5},{label:'لا يوجد',val:0}] },
+    { key: 'col_guarantee_cheques', label: 'شيكات ضمان', max: 0.5, options: [{label:'يوجد',val:0.5},{label:'لا يوجد',val:0}] },
     { key: 'col_client_insurance', label: 'عباءات مالية للعميل', max: 0.5, options: [{label:'يوجد',val:0.5},{label:'لا يوجد',val:0}] },
     { key: 'col_guarantor_insurance', label: 'عباءات مالية للضمان', max: 0.5, options: [{label:'يوجد',val:0.5},{label:'لا يوجد',val:0}] },
   ]},
@@ -59,7 +59,7 @@ const FIVE_CS_ITEMS = {
 }
 
 const SECTIONS = [
-  {id:'iscore',label:'الايسكور'},
+  {id:'client',label:'بيانات العميل'},
   {id:'bank',label:'كشف الحساب'},
   {id:'visit',label:'الزيارة الميدانية'},
   {id:'guarantors',label:'الضامنون'},
@@ -71,57 +71,22 @@ const SECTIONS = [
 function Row({label,children}){return(<div><label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>{children}</div>)}
 function G2({children}){return(<div className="grid grid-cols-2 gap-3">{children}</div>)}
 function Card({children,title}){return(<div className="bg-white rounded-xl border border-gray-100 p-5 mb-4 shadow-sm">{title&&<h4 className="text-sm font-bold text-navy-700 mb-3 border-b pb-2">{title}</h4>}{children}</div>)}
+function Sel({value,onChange,options,placeholder='اختر...'}){return(<select value={value||''} onChange={e=>onChange(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-400"><option value="">{placeholder}</option>{options.map(o=>(<option key={typeof o==='string'?o:o.value} value={typeof o==='string'?o:o.value}>{typeof o==='string'?o:o.label}</option>))}</select>)}
+function Inp({value,onChange,type='text',placeholder=''}){return(<input type={type} value={value||''} placeholder={placeholder} onChange={e=>onChange(type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400"/>)}
+function Toggle({label,value,onChange}){return(<div className="flex items-center justify-between py-2"><span className="text-sm text-gray-700">{label}</span><div onClick={()=>onChange(!value)} className={`w-12 h-6 rounded-full cursor-pointer relative flex-shrink-0 transition-colors ${value?'bg-emerald-500':'bg-gray-300'}`}><div className={`w-5 h-5 bg-white rounded-full shadow-sm absolute top-0.5 transition-all duration-200 ${value?'right-0.5':'left-0.5'}`}/></div></div>)}
+function TA({value,onChange,rows=2,placeholder=''}){return(<textarea value={value||''} onChange={e=>onChange(e.target.value)} rows={rows} placeholder={placeholder} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>)}
 
-function Sel({value,onChange,options,placeholder='اختر...'}){
-  return(<select value={value||''} onChange={e=>onChange(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-400">
-    <option value="">{placeholder}</option>
-    {options.map(o=>(<option key={typeof o==='string'?o:o.value} value={typeof o==='string'?o:o.value}>{typeof o==='string'?o:o.label}</option>))}
-  </select>)
-}
-function Inp({value,onChange,type='text',placeholder=''}){
-  return(<input type={type} value={value||''} placeholder={placeholder} onChange={e=>onChange(type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400"/>)
-}
-function Toggle({label,value,onChange}){
-  return(<div className="flex items-center justify-between py-2">
-    <span className="text-sm text-gray-700">{label}</span>
-    <div onClick={()=>onChange(!value)} className={`w-12 h-6 rounded-full cursor-pointer relative flex-shrink-0 transition-colors ${value?'bg-emerald-500':'bg-gray-300'}`}>
-      <div className={`w-5 h-5 bg-white rounded-full shadow-sm absolute top-0.5 transition-all duration-200 ${value?'right-0.5':'left-0.5'}`}/>
-    </div>
-  </div>)
-}
-
-const EMPTY_MONTH = { month: '', credit: '', debit: '', balance: '', notes: '' }
-
-const INIT_BANK = {
-  bank_name: '',
-  account_type: '',
-  period: '',
-  avg_balance: '',
-  has_returned_checks: false,
-  returned_checks_details: '',
-  has_late_fees: false,
-  late_fees_details: '',
-  has_loans_on_statement: false,
-  loans_details: '',
-  self_transfers: '',
-  empty_months: '',
-  notes: '',
-  monthly_details: [
-    {...EMPTY_MONTH},
-    {...EMPTY_MONTH},
-    {...EMPTY_MONTH},
-    {...EMPTY_MONTH},
-    {...EMPTY_MONTH},
-    {...EMPTY_MONTH},
-  ]
-}
+const EMPTY_MONTH = {month:'',credit:'',debit:'',balance:'',notes:''}
+const INIT_BANK = {bank_name:'',account_type:'',period:'',avg_balance:'',has_returned_checks:false,returned_checks_details:'',has_late_fees:false,late_fees_details:'',has_loans_on_statement:false,loans_details:'',self_transfers:'',empty_months:'',notes:'',monthly_details:[{...EMPTY_MONTH},{...EMPTY_MONTH},{...EMPTY_MONTH},{...EMPTY_MONTH},{...EMPTY_MONTH},{...EMPTY_MONTH}]}
 
 const INIT = {
+  client_age:'',
+  client_financial_assets:'',
   operation_rating:'',employee_count:'',legal_status:'',business_ownership:'',residence_ownership:'',has_tools:false,has_leverage:false,
   sales_specialist:'',sales_investigator:'',sales_manager:'',sales_proof:'',purchases_proof:'',monthly_expenses:'',
   capital_specialist:'',capital_investigator:'',capital_manager:'',
-  g1_name:'',g1_age:'',g1_relation:'',g1_job:'',g1_employer:'',g1_residence:'',g1_has_debts:false,
-  g2_name:'',g2_age:'',g2_relation:'',g2_job:'',g2_employer:'',g2_residence:'',g2_has_debts:false,
+  g1_name:'',g1_age:'',g1_relation:'',g1_employer:'',
+  g2_name:'',g2_age:'',g2_relation:'',g2_employer:'',
   client_called:false,client_call_result:'',client_call_notes:'',
   g1_called:false,g1_call_result:'',g1_call_notes:'',
   g2_called:false,g2_call_result:'',g2_call_notes:'',
@@ -132,19 +97,19 @@ const INIT = {
   cap_leverage:0,cap_business_ownership:0,cap_residence:0,cap_tools:0,
   cond_operation:0,cond_employees:0,cond_legal:0,
   analyst_decision:'',recommended_amount:'',collaterals:[],fulfillments:[],analyst_notes:'',analyst_name:'',
-  ai_iscore_grade:'',ai_iscore_score:'',ai_outstanding_loans:'',ai_avg_balance:'',ai_returned_cheques:false,
+  ai_iscore_grade:'',ai_iscore_score:'',ai_outstanding_loans:'',ai_returned_cheques:false,
   ai_ecr_value:'',ai_monthly_sales:'',ai_monthly_purchases:'',ai_iscore_notes:'',
   ai_inquiries_count:'',
 }
 
-const n = (v) => v === '' || v === null || v === undefined ? null : Number(v) || null
+const n=(v)=>v===''||v===null||v===undefined?null:Number(v)||null
 
 export default function AnalystDrawer({application,onClose,onSaved}){
   const [data,setData]=useState(INIT)
   const [bank,setBank]=useState(INIT_BANK)
   const [saving,setSaving]=useState(false)
   const [existingId,setExistingId]=useState(null)
-  const [activeSection,setActiveSection]=useState('iscore')
+  const [activeSection,setActiveSection]=useState('client')
   const toast=useToast()
   const set=(k,v)=>setData(p=>({...p,[k]:v}))
   const setB=(k,v)=>setBank(p=>({...p,[k]:v}))
@@ -160,37 +125,21 @@ export default function AnalystDrawer({application,onClose,onSaved}){
         collaterals:ex.collaterals?ex.collaterals.split(',').filter(Boolean):[],
         fulfillments:ex.fulfillments?ex.fulfillments.split('||').filter(Boolean):[],
       }))
-      if(ex.bank_statement_data && Object.keys(ex.bank_statement_data).length > 0){
-        const bd = ex.bank_statement_data
-        setBank({
-          ...INIT_BANK,
-          ...bd,
-          monthly_details: bd.monthly_details && bd.monthly_details.length > 0 ? bd.monthly_details : INIT_BANK.monthly_details
-        })
+      if(ex.bank_statement_data&&Object.keys(ex.bank_statement_data).length>0){
+        const bd=ex.bank_statement_data
+        setBank({...INIT_BANK,...bd,monthly_details:bd.monthly_details&&bd.monthly_details.length>0?bd.monthly_details:INIT_BANK.monthly_details})
       }
     }
   }
 
-  function updateMonth(idx, field, value){
-    setBank(p=>{
-      const months = [...p.monthly_details]
-      months[idx] = {...months[idx], [field]: value}
-      return {...p, monthly_details: months}
-    })
-  }
-
-  function addMonth(){
-    setBank(p=>({...p, monthly_details: [...p.monthly_details, {...EMPTY_MONTH}]}))
-  }
-
-  function removeMonth(idx){
-    setBank(p=>({...p, monthly_details: p.monthly_details.filter((_,i)=>i!==idx)}))
-  }
+  function updateMonth(idx,field,value){setBank(p=>{const m=[...p.monthly_details];m[idx]={...m[idx],[field]:value};return{...p,monthly_details:m}})}
+  function addMonth(){setBank(p=>({...p,monthly_details:[...p.monthly_details,{...EMPTY_MONTH}]}))}
+  function removeMonth(idx){setBank(p=>({...p,monthly_details:p.monthly_details.filter((_,i)=>i!==idx)}))}
 
   function calcAvgCredit(){
-    const months = bank.monthly_details.filter(m => m.credit !== '' && m.credit !== null)
-    if(months.length === 0) return 0
-    return Math.round(months.reduce((s,m) => s + Number(m.credit||0), 0) / months.length)
+    const filled=bank.monthly_details.filter(m=>m.credit!==''&&m.credit!==null)
+    if(filled.length===0)return 0
+    return Math.round(filled.reduce((s,m)=>s+Number(m.credit||0),0)/filled.length)
   }
 
   function calcScores(){
@@ -217,100 +166,80 @@ export default function AnalystDrawer({application,onClose,onSaved}){
     const scores=calcScores()
     const five_cs_details={}
     Object.values(FIVE_CS_ITEMS).forEach(c=>c.items.forEach(i=>{five_cs_details[i.key]=data[i.key]||0}))
-
-    const bankData = {
-      ...bank,
-      avg_balance: bank.avg_balance || calcAvgCredit(),
-    }
+    const bankData={...bank,avg_balance:bank.avg_balance||calcAvgCredit()}
 
     const payload={
-      application_id: application.id,
-      operation_rating: data.operation_rating||null,
-      employee_count: data.employee_count||null,
-      legal_status: data.legal_status||null,
-      business_ownership: data.business_ownership||null,
-      residence_ownership: data.residence_ownership||null,
-      has_tools: data.has_tools,
-      has_leverage: data.has_leverage,
-      sales_specialist: n(data.sales_specialist),
-      sales_investigator: n(data.sales_investigator),
-      sales_manager: n(data.sales_manager),
-      sales_proof: data.sales_proof||null,
-      purchases_proof: data.purchases_proof||null,
-      monthly_expenses: n(data.monthly_expenses),
-      capital_specialist: n(data.capital_specialist),
-      capital_investigator: n(data.capital_investigator),
-      capital_manager: n(data.capital_manager),
-      g1_name: data.g1_name||null,
-      g1_age: n(data.g1_age),
-      g1_relation: data.g1_relation||null,
-      g1_job: data.g1_job||null,
-      g1_employer: data.g1_employer||null,
-      g1_residence: data.g1_residence||null,
-      g1_has_debts: data.g1_has_debts,
-      g2_name: data.g2_name||null,
-      g2_age: n(data.g2_age),
-      g2_relation: data.g2_relation||null,
-      g2_job: data.g2_job||null,
-      g2_employer: data.g2_employer||null,
-      g2_residence: data.g2_residence||null,
-      g2_has_debts: data.g2_has_debts,
-      client_called: data.client_called,
-      client_call_result: data.client_call_result||null,
-      client_call_notes: data.client_call_notes||null,
-      g1_called: data.g1_called,
-      g1_call_result: data.g1_call_result||null,
-      g1_call_notes: data.g1_call_notes||null,
-      g2_called: data.g2_called,
-      g2_call_result: data.g2_call_result||null,
-      g2_call_notes: data.g2_call_notes||null,
-      suppliers_called: data.suppliers_called,
-      suppliers_notes: data.suppliers_notes||null,
+      application_id:application.id,
+      client_age:n(data.client_age),
+      client_financial_assets:data.client_financial_assets||null,
+      operation_rating:data.operation_rating||null,
+      employee_count:data.employee_count||null,
+      legal_status:data.legal_status||null,
+      business_ownership:data.business_ownership||null,
+      residence_ownership:data.residence_ownership||null,
+      has_tools:data.has_tools,
+      has_leverage:data.has_leverage,
+      sales_specialist:n(data.sales_specialist),
+      sales_investigator:n(data.sales_investigator),
+      sales_manager:n(data.sales_manager),
+      sales_proof:data.sales_proof||null,
+      purchases_proof:data.purchases_proof||null,
+      monthly_expenses:n(data.monthly_expenses),
+      capital_specialist:n(data.capital_specialist),
+      capital_investigator:n(data.capital_investigator),
+      capital_manager:n(data.capital_manager),
+      g1_name:data.g1_name||null,
+      g1_age:n(data.g1_age),
+      g1_relation:data.g1_relation||null,
+      g1_employer:data.g1_employer||null,
+      g2_name:data.g2_name||null,
+      g2_age:n(data.g2_age),
+      g2_relation:data.g2_relation||null,
+      g2_employer:data.g2_employer||null,
+      client_called:data.client_called,
+      client_call_result:data.client_call_result||null,
+      client_call_notes:data.client_call_notes||null,
+      g1_called:data.g1_called,
+      g1_call_result:data.g1_call_result||null,
+      g1_call_notes:data.g1_call_notes||null,
+      g2_called:data.g2_called,
+      g2_call_result:data.g2_call_result||null,
+      g2_call_notes:data.g2_call_notes||null,
+      suppliers_called:data.suppliers_called,
+      suppliers_notes:data.suppliers_notes||null,
       five_cs_details,
-      score_character: scores.char,
-      score_credit_history: scores.credit,
-      score_collateral: scores.col,
-      score_capital: scores.cap,
-      score_conditions: scores.cond,
-      total_score: scores.total,
-      ai_iscore_grade: data.ai_iscore_grade||null,
-      ai_iscore_score: n(data.ai_iscore_score),
-      ai_outstanding_loans: n(data.ai_outstanding_loans),
-      ai_avg_balance: n(data.ai_avg_balance),
-      ai_returned_cheques: data.ai_returned_cheques,
-      ai_ecr_value: n(data.ai_ecr_value),
-      ai_monthly_sales: n(data.ai_monthly_sales),
-      ai_monthly_purchases: n(data.ai_monthly_purchases),
-      ai_iscore_notes: data.ai_iscore_notes||null,
-      ai_inquiries_count: n(data.ai_inquiries_count),
-      analyst_decision: data.analyst_decision||null,
-      analyst_name: data.analyst_name||null,
-      analyst_notes: data.analyst_notes||null,
-      collaterals: data.collaterals.join(','),
-      fulfillments: data.fulfillments.join('||'),
-      recommended_amount: n(data.recommended_amount)||autoAmount(scores.total)||null,
-      bank_statement_data: bankData,
-      updated_at: new Date().toISOString(),
+      score_character:scores.char,
+      score_credit_history:scores.credit,
+      score_collateral:scores.col,
+      score_capital:scores.cap,
+      score_conditions:scores.cond,
+      total_score:scores.total,
+      ai_iscore_grade:data.ai_iscore_grade||null,
+      ai_iscore_score:n(data.ai_iscore_score),
+      ai_outstanding_loans:n(data.ai_outstanding_loans),
+      ai_returned_cheques:data.ai_returned_cheques,
+      ai_ecr_value:n(data.ai_ecr_value),
+      ai_monthly_sales:n(data.ai_monthly_sales),
+      ai_monthly_purchases:n(data.ai_monthly_purchases),
+      ai_iscore_notes:data.ai_iscore_notes||null,
+      ai_inquiries_count:n(data.ai_inquiries_count),
+      analyst_decision:data.analyst_decision||null,
+      analyst_name:data.analyst_name||null,
+      analyst_notes:data.analyst_notes||null,
+      collaterals:data.collaterals.join(','),
+      fulfillments:data.fulfillments.join('||'),
+      recommended_amount:n(data.recommended_amount)||autoAmount(scores.total)||null,
+      bank_statement_data:bankData,
+      updated_at:new Date().toISOString(),
     }
 
     let error
-    if(existingId){
-      const res=await supabase.from('analyst_assessments').update(payload).eq('id',existingId)
-      error=res.error
-    } else {
-      const res=await supabase.from('analyst_assessments').insert(payload).select().single()
-      error=res.error
-      if(res.data) setExistingId(res.data.id)
-    }
+    if(existingId){const res=await supabase.from('analyst_assessments').update(payload).eq('id',existingId);error=res.error}
+    else{const res=await supabase.from('analyst_assessments').insert(payload).select().single();error=res.error;if(res.data)setExistingId(res.data.id)}
 
-    if(error){
-      toast('خطأ: '+error.message,'error')
-    } else {
-      fetch(N8N_ANALYZE_WEBHOOK,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({application_id:application.id}),
-      }).catch(()=>{})
+    if(error){toast('خطأ: '+error.message,'error')}
+    else{
+      fetch(N8N_ANALYZE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({application_id:application.id})}).catch(()=>{})
       toast('تم حفظ التقييم وبدأ توليد جواب المخاطر ✓','success')
       onSaved?.()
     }
@@ -320,7 +249,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
   const scores=calcScores()
   const scoreLabel=scores.total>=20?'موافقة بنفس المبلغ':scores.total>=15?'موافقة بتخفيض 25%':scores.total>=10?'تخفيض 50%':'رفض قطعاً'
   const scoreColor=scores.total>=20?'text-emerald-400':scores.total>=15?'text-amber-400':scores.total>=10?'text-orange-400':'text-red-400'
-  const avgCredit = calcAvgCredit()
+  const avgCredit=calcAvgCredit()
 
   return(
     <div className="fixed inset-0 z-50 bg-gray-100" dir="rtl">
@@ -358,26 +287,38 @@ export default function AnalystDrawer({application,onClose,onSaved}){
 
         <div className="flex-1 overflow-y-auto p-6">
 
-          {/* ISCORE SECTION */}
-          <div id="section-iscore">
-            <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">بيانات الايسكور</h2>
-            <Card>
+          {/* CLIENT SECTION */}
+          <div id="section-client">
+            <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">بيانات العميل والايسكور</h2>
+            <Card title="بيانات أساسية">
               <G2>
+                <Row label="سن العميل"><Inp type="number" value={data.client_age} onChange={v=>set('client_age',v)} placeholder="مثال: 41"/></Row>
                 <Row label="التصنيف الائتماني (A-F)"><Inp value={data.ai_iscore_grade} onChange={v=>set('ai_iscore_grade',v)} placeholder="A"/></Row>
                 <Row label="الدرجة الرقمية"><Inp type="number" value={data.ai_iscore_score} onChange={v=>set('ai_iscore_score',v)} placeholder="750"/></Row>
-                <Row label="إجمالي الالتزامات القائمة (جنيه)"><Inp type="number" value={data.ai_outstanding_loans} onChange={v=>set('ai_outstanding_loans',v)}/></Row>
                 <Row label="عدد الاستعلامات"><Inp type="number" value={data.ai_inquiries_count} onChange={v=>set('ai_inquiries_count',v)}/></Row>
+                <Row label="إجمالي الالتزامات القائمة (جنيه)"><Inp type="number" value={data.ai_outstanding_loans} onChange={v=>set('ai_outstanding_loans',v)}/></Row>
+                <Row label="قيمة الرهن الحيازي (جنيه)"><Inp type="number" value={data.ai_ecr_value} onChange={v=>set('ai_ecr_value',v)}/></Row>
               </G2>
-              <Toggle label="يوجد شيكات مرتجعة أو تعثر" value={data.ai_returned_cheques} onChange={v=>set('ai_returned_cheques',v)}/>
-              <Row label="ملاحظات الايسكور (تفاصيل الالتزامات والتأخيرات)">
-                <textarea value={data.ai_iscore_notes||''} onChange={e=>set('ai_iscore_notes',e.target.value)} rows={4} placeholder="اكتب تفاصيل كل قرض: الجهة، المبلغ، المدة، الحالة، وأي تأخيرات..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>
+              <Toggle label="يوجد شيكات مرتجعة أو تعثر في الايسكور" value={data.ai_returned_cheques} onChange={v=>set('ai_returned_cheques',v)}/>
+              <div className="mt-3">
+                <Row label="تفاصيل الالتزامات والتاريخ الائتماني">
+                  <TA value={data.ai_iscore_notes} onChange={v=>set('ai_iscore_notes',v)} rows={4} placeholder="اكتب تفاصيل كل قرض: الجهة، المبلغ، المدة، الحالة، التأخيرات إن وجدت..."/>
+                </Row>
+              </div>
+            </Card>
+
+            <Card title="العباءات المالية للعميل — الملاءة المالية المثبتة">
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">طبقاً للائحة يجب وجود ملاءة مالية مثبتة (أرض / عقار / سيارات / ملكية النشاط). اذكر التفاصيل بدقة.</p>
+              <Row label="تفاصيل العباءات والملاءة المالية للعميل">
+                <TA value={data.client_financial_assets} onChange={v=>set('client_financial_assets',v)} rows={5}
+                  placeholder="مثال: &#10;- شقة سكنية بالقاهرة ملك تام 180 متر (مثبتة بعقد تمليك)&#10;- سيارة X نوع Y موديل Z رقم لوحة ...&#10;- ملكية النشاط (مخزن / محل)&#10;- أرض زراعية بالمحافظة X مساحة Y فدان"/>
               </Row>
             </Card>
+
             <Card>
               <G2>
                 <Row label="المبيعات الشهرية المثبتة (جنيه)"><Inp type="number" value={data.ai_monthly_sales} onChange={v=>set('ai_monthly_sales',v)}/></Row>
                 <Row label="المشتريات الشهرية (جنيه)"><Inp type="number" value={data.ai_monthly_purchases} onChange={v=>set('ai_monthly_purchases',v)}/></Row>
-                <Row label="قيمة الرهن الحيازي (جنيه)"><Inp type="number" value={data.ai_ecr_value} onChange={v=>set('ai_ecr_value',v)}/></Row>
               </G2>
             </Card>
           </div>
@@ -388,10 +329,8 @@ export default function AnalystDrawer({application,onClose,onSaved}){
             <Card>
               <G2>
                 <Row label="اسم البنك"><Inp value={bank.bank_name} onChange={v=>setB('bank_name',v)} placeholder="مثال: بنك مصر"/></Row>
-                <Row label="نوع الحساب">
-                  <Sel value={bank.account_type} onChange={v=>setB('account_type',v)} options={['حساب شخصي','حساب منشأة','حساب جاري','حساب توفير']}/>
-                </Row>
-                <Row label="فترة الكشف"><Inp value={bank.period} onChange={v=>setB('period',v)} placeholder="مثال: يناير 2025 — يونيو 2025"/></Row>
+                <Row label="نوع الحساب"><Sel value={bank.account_type} onChange={v=>setB('account_type',v)} options={['حساب شخصي','حساب منشأة','حساب جاري','حساب توفير']}/></Row>
+                <Row label="فترة الكشف"><Inp value={bank.period} onChange={v=>setB('period',v)} placeholder="يناير 2025 — يونيو 2025"/></Row>
                 <Row label="متوسط الرصيد الشهري (جنيه)"><Inp type="number" value={bank.avg_balance} onChange={v=>setB('avg_balance',v)}/></Row>
               </G2>
             </Card>
@@ -402,9 +341,9 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                   <thead>
                     <tr className="bg-gray-50 text-gray-600">
                       <th className="text-right px-3 py-2 font-semibold">الشهر</th>
-                      <th className="text-right px-3 py-2 font-semibold">إجمالي الدائن (جنيه)</th>
-                      <th className="text-right px-3 py-2 font-semibold">إجمالي المدين (جنيه)</th>
-                      <th className="text-right px-3 py-2 font-semibold">الرصيد الختامي (جنيه)</th>
+                      <th className="text-right px-3 py-2 font-semibold">الدائن (جنيه)</th>
+                      <th className="text-right px-3 py-2 font-semibold">المدين (جنيه)</th>
+                      <th className="text-right px-3 py-2 font-semibold">الرصيد الختامي</th>
                       <th className="text-right px-3 py-2 font-semibold">ملاحظات</th>
                       <th className="px-2 py-2"></th>
                     </tr>
@@ -416,57 +355,35 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                         <td className="px-2 py-1.5"><input type="number" value={m.credit||''} onChange={e=>updateMonth(i,'credit',e.target.value===''?'':Number(e.target.value))} className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-navy-400"/></td>
                         <td className="px-2 py-1.5"><input type="number" value={m.debit||''} onChange={e=>updateMonth(i,'debit',e.target.value===''?'':Number(e.target.value))} className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-navy-400"/></td>
                         <td className="px-2 py-1.5"><input type="number" value={m.balance||''} onChange={e=>updateMonth(i,'balance',e.target.value===''?'':Number(e.target.value))} className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-navy-400"/></td>
-                        <td className="px-2 py-1.5"><input value={m.notes||''} onChange={e=>updateMonth(i,'notes',e.target.value)} placeholder="تحويلات ذاتية، غرامات..." className="w-48 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-navy-400"/></td>
-                        <td className="px-2 py-1.5">
-                          {bank.monthly_details.length > 1 && (
-                            <button onClick={()=>removeMonth(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
-                          )}
-                        </td>
+                        <td className="px-2 py-1.5"><input value={m.notes||''} onChange={e=>updateMonth(i,'notes',e.target.value)} placeholder="تحويلات ذاتية، غرامات..." className="w-44 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-navy-400"/></td>
+                        <td className="px-2 py-1.5">{bank.monthly_details.length>1&&(<button onClick={()=>removeMonth(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <div className="flex items-center justify-between mt-3">
-                <button onClick={addMonth} className="flex items-center gap-1 text-sm text-navy-600 hover:text-navy-800 font-medium">
-                  <Plus size={14}/>إضافة شهر
-                </button>
-                {avgCredit > 0 && (
-                  <div className="text-sm bg-navy-50 px-3 py-1.5 rounded-lg">
-                    متوسط التدفق الدائن الشهري: <span className="font-bold text-navy-800">{avgCredit.toLocaleString('ar-EG')} جنيه</span>
-                  </div>
-                )}
+                <button onClick={addMonth} className="flex items-center gap-1 text-sm text-navy-600 hover:text-navy-800 font-medium"><Plus size={14}/>إضافة شهر</button>
+                {avgCredit>0&&(<div className="text-sm bg-navy-50 px-3 py-1.5 rounded-lg">متوسط التدفق الدائن: <span className="font-bold text-navy-800">{avgCredit.toLocaleString('ar-EG')} جنيه</span></div>)}
               </div>
             </Card>
 
             <Card title="مؤشرات المخاطر في كشف الحساب">
               <Toggle label="يوجد شيكات مرتدة" value={bank.has_returned_checks} onChange={v=>setB('has_returned_checks',v)}/>
-              {bank.has_returned_checks && (
-                <Row label="تفاصيل الشيكات المرتدة">
-                  <textarea value={bank.returned_checks_details||''} onChange={e=>setB('returned_checks_details',e.target.value)} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>
-                </Row>
-              )}
+              {bank.has_returned_checks&&<div className="mt-2"><Row label="تفاصيل الشيكات المرتدة"><TA value={bank.returned_checks_details} onChange={v=>setB('returned_checks_details',v)}/></Row></div>}
               <Toggle label="يوجد غرامات تأخير" value={bank.has_late_fees} onChange={v=>setB('has_late_fees',v)}/>
-              {bank.has_late_fees && (
-                <Row label="تفاصيل غرامات التأخير">
-                  <textarea value={bank.late_fees_details||''} onChange={e=>setB('late_fees_details',e.target.value)} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>
-                </Row>
-              )}
-              <Toggle label="يوجد تمويلات مصدرة على الكشف" value={bank.has_loans_on_statement} onChange={v=>setB('has_loans_on_statement',v)}/>
-              {bank.has_loans_on_statement && (
-                <Row label="تفاصيل التمويلات على الكشف">
-                  <textarea value={bank.loans_details||''} onChange={e=>setB('loans_details',e.target.value)} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>
-                </Row>
-              )}
-              <Row label="معاملات من نفس الشخص (تحويلات ذاتية)">
-                <textarea value={bank.self_transfers||''} onChange={e=>setB('self_transfers',e.target.value)} rows={2} placeholder="اذكر إذا كانت هناك تحويلات متكررة من نفس الشخص أو لنفس الشخص..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>
-              </Row>
-              <Row label="شهور بدون معاملات">
-                <Inp value={bank.empty_months} onChange={v=>setB('empty_months',v)} placeholder="مثال: أغسطس 2024، نوفمبر 2024"/>
-              </Row>
-              <Row label="ملاحظات إضافية على كشف الحساب">
-                <textarea value={bank.notes||''} onChange={e=>setB('notes',e.target.value)} rows={3} placeholder="أي ملاحظات مهمة على سلوك الحساب..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/>
-              </Row>
+              {bank.has_late_fees&&<div className="mt-2"><Row label="تفاصيل غرامات التأخير"><TA value={bank.late_fees_details} onChange={v=>setB('late_fees_details',v)}/></Row></div>}
+              <Toggle label="يوجد تمويلات مصدرة تظهر على الكشف" value={bank.has_loans_on_statement} onChange={v=>setB('has_loans_on_statement',v)}/>
+              {bank.has_loans_on_statement&&<div className="mt-2"><Row label="تفاصيل التمويلات"><TA value={bank.loans_details} onChange={v=>setB('loans_details',v)}/></Row></div>}
+              <div className="mt-2">
+                <Row label="معاملات من نفس الشخص (تحويلات ذاتية)"><TA value={bank.self_transfers} onChange={v=>setB('self_transfers',v)} placeholder="اذكر إذا كانت هناك تحويلات متكررة من أو لنفس الشخص..."/></Row>
+              </div>
+              <div className="mt-2">
+                <Row label="شهور بدون معاملات"><Inp value={bank.empty_months} onChange={v=>setB('empty_months',v)} placeholder="مثال: أغسطس 2024، نوفمبر 2024"/></Row>
+              </div>
+              <div className="mt-2">
+                <Row label="ملاحظات إضافية على سلوك الحساب"><TA value={bank.notes} onChange={v=>setB('notes',v)} rows={3} placeholder="أي ملاحظات مهمة..."/></Row>
+              </div>
             </Card>
           </div>
 
@@ -477,22 +394,24 @@ export default function AnalystDrawer({application,onClose,onSaved}){
               <G2>
                 <Row label="انتظام التشغيل"><Sel value={data.operation_rating} onChange={v=>set('operation_rating',v)} options={['ممتاز','جيد','متوسط','ضعيف']}/></Row>
                 <Row label="عدد العمالة"><Sel value={data.employee_count} onChange={v=>set('employee_count',v)} options={['1 إلى 5','6 إلى 10','أكثر من 10','بدون عمالة']}/></Row>
-                <Row label="الوضع القانوني للنشاط"><Sel value={data.legal_status} onChange={v=>set('legal_status',v)} options={['مرخص بالكامل','مرخص جزئياً','قيد الاستخراج','غير مرخص']}/></Row>
+                <Row label="الوضع القانوني"><Sel value={data.legal_status} onChange={v=>set('legal_status',v)} options={['مرخص بالكامل','مرخص جزئياً','قيد الاستخراج','غير مرخص']}/></Row>
                 <Row label="ملكية محل النشاط"><Sel value={data.business_ownership} onChange={v=>set('business_ownership',v)} options={['ملك تام','إيجار موثق','إيجار غير موثق']}/></Row>
                 <Row label="ملكية السكن"><Sel value={data.residence_ownership} onChange={v=>set('residence_ownership',v)} options={['ملك','إيجار','مع العائلة']}/></Row>
+                <Row label="إثبات المبيعات"><Sel value={data.sales_proof} onChange={v=>set('sales_proof',v)} options={['فواتير ورقية','فواتير إلكترونية','فواتير جزئية','لا يوجد']}/></Row>
+                <Row label="إثبات المشتريات"><Sel value={data.purchases_proof} onChange={v=>set('purchases_proof',v)} options={['فواتير ورقية','فواتير إلكترونية','فواتير جزئية','لا يوجد']}/></Row>
               </G2>
               <Toggle label="يوجد أدوات تخدم النشاط" value={data.has_tools} onChange={v=>set('has_tools',v)}/>
               <Toggle label="يوجد رافعة مالية (ديون تجارية أو بضاعة بالأجل)" value={data.has_leverage} onChange={v=>set('has_leverage',v)}/>
-              <h4 className="text-sm font-bold text-navy-700 mt-4 mb-3 border-b pb-2">تقدير المبيعات الشهرية (جنيه)</h4>
+            </Card>
+            <Card title="تقديرات المبيعات الشهرية (جنيه)">
               <G2>
                 <Row label="تقدير الاخصائي"><Inp type="number" value={data.sales_specialist} onChange={v=>set('sales_specialist',v)}/></Row>
                 <Row label="تقدير المستعلم"><Inp type="number" value={data.sales_investigator} onChange={v=>set('sales_investigator',v)}/></Row>
                 <Row label="تقدير مدير المشروعات"><Inp type="number" value={data.sales_manager} onChange={v=>set('sales_manager',v)}/></Row>
                 <Row label="المصروفات الشهرية الإجمالية"><Inp type="number" value={data.monthly_expenses} onChange={v=>set('monthly_expenses',v)}/></Row>
-                <Row label="إثبات المبيعات"><Sel value={data.sales_proof} onChange={v=>set('sales_proof',v)} options={['فواتير ورقية','فواتير إلكترونية','فواتير جزئية','لا يوجد']}/></Row>
-                <Row label="إثبات المشتريات"><Sel value={data.purchases_proof} onChange={v=>set('purchases_proof',v)} options={['فواتير ورقية','فواتير إلكترونية','فواتير جزئية','لا يوجد']}/></Row>
               </G2>
-              <h4 className="text-sm font-bold text-navy-700 mt-4 mb-3 border-b pb-2">تقدير رأس المال (جنيه)</h4>
+            </Card>
+            <Card title="تقديرات رأس المال (جنيه)">
               <G2>
                 <Row label="تقدير الاخصائي"><Inp type="number" value={data.capital_specialist} onChange={v=>set('capital_specialist',v)}/></Row>
                 <Row label="تقدير المستعلم"><Inp type="number" value={data.capital_investigator} onChange={v=>set('capital_investigator',v)}/></Row>
@@ -504,18 +423,14 @@ export default function AnalystDrawer({application,onClose,onSaved}){
           {/* GUARANTORS SECTION */}
           <div id="section-guarantors">
             <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">بيانات الضامنين</h2>
-            {[1,2].map(n=>(
-              <Card key={n}>
-                <h4 className="text-sm font-bold text-navy-700 mb-3">الضامن {n===1?'الأول (ض١)':'الثاني (ض٢)'}</h4>
+            {[1,2].map(num=>(
+              <Card key={num} title={`الضامن ${num===1?'الأول (ض١)':'الثاني (ض٢)'}`}>
                 <G2>
-                  <Row label="الاسم"><Inp value={data[`g${n}_name`]} onChange={v=>set(`g${n}_name`,v)}/></Row>
-                  <Row label="السن"><Inp type="number" value={data[`g${n}_age`]} onChange={v=>set(`g${n}_age`,v)}/></Row>
-                  <Row label="الصلة بالعميل"><Sel value={data[`g${n}_relation`]} onChange={v=>set(`g${n}_relation`,v)} options={RELATIONS}/></Row>
-                  <Row label="الوظيفة"><Sel value={data[`g${n}_job`]} onChange={v=>set(`g${n}_job`,v)} options={JOBS}/></Row>
-                  <Row label="جهة العمل / العباءة المالية"><Inp value={data[`g${n}_employer`]} onChange={v=>set(`g${n}_employer`,v)}/></Row>
-                  <Row label="ملكية السكن"><Sel value={data[`g${n}_residence`]} onChange={v=>set(`g${n}_residence`,v)} options={['ملك','إيجار','مع العائلة']}/></Row>
+                  <Row label="الاسم"><Inp value={data[`g${num}_name`]} onChange={v=>set(`g${num}_name`,v)}/></Row>
+                  <Row label="السن"><Inp type="number" value={data[`g${num}_age`]} onChange={v=>set(`g${num}_age`,v)}/></Row>
+                  <Row label="الصلة بالعميل"><Sel value={data[`g${num}_relation`]} onChange={v=>set(`g${num}_relation`,v)} options={RELATIONS}/></Row>
+                  <Row label="الوظيفة / العباءة المالية"><Inp value={data[`g${num}_employer`]} onChange={v=>set(`g${num}_employer`,v)} placeholder="مثال: موظف ببنك مصر / مدرسة بالحكومة / عقار ملك..."/></Row>
                 </G2>
-                <Toggle label="لديه مديونيات قائمة" value={data[`g${n}_has_debts`]} onChange={v=>set(`g${n}_has_debts`,v)}/>
               </Card>
             ))}
           </div>
@@ -529,14 +444,14 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                 {data[`${key}_called`]&&(
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <Row label="نتيجة المكالمة"><Sel value={data[`${key}_call_result`]} onChange={v=>set(`${key}_call_result`,v)} options={CALL_RESULTS}/></Row>
-                    <Row label="ملاحظات"><textarea value={data[`${key}_call_notes`]||''} onChange={e=>set(`${key}_call_notes`,e.target.value)} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/></Row>
+                    <Row label="ملاحظات"><TA value={data[`${key}_call_notes`]} onChange={v=>set(`${key}_call_notes`,v)}/></Row>
                   </div>
                 )}
               </Card>
             ))}
             <Card>
               <Toggle label="مكالمة الموردين" value={data.suppliers_called} onChange={v=>set('suppliers_called',v)}/>
-              {data.suppliers_called&&(<div className="mt-3"><Row label="ملاحظات الموردين"><textarea value={data.suppliers_notes||''} onChange={e=>set('suppliers_notes',e.target.value)} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/></Row></div>)}
+              {data.suppliers_called&&<div className="mt-3"><Row label="ملاحظات الموردين"><TA value={data.suppliers_notes} onChange={v=>set('suppliers_notes',v)}/></Row></div>}
             </Card>
           </div>
 
@@ -579,8 +494,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                 <Row label="اسم مسؤول المخاطر"><Inp value={data.analyst_name} onChange={v=>set('analyst_name',v)} placeholder="الاسم بالكامل"/></Row>
               </G2>
             </Card>
-            <Card>
-              <h4 className="font-bold text-navy-700 mb-3">الضمانات المطلوبة</h4>
+            <Card title="الضمانات المطلوبة">
               <div className="grid grid-cols-3 gap-2">
                 {COLLATERAL_OPTIONS.map(item=>(
                   <button key={item} onClick={()=>toggleItem('collaterals',item)} className={`text-sm px-3 py-2 rounded-lg border transition-colors text-right ${data.collaterals.includes(item)?'bg-navy-800 text-white border-navy-800':'bg-white text-gray-600 border-gray-200 hover:border-navy-400'}`}>
@@ -589,8 +503,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                 ))}
               </div>
             </Card>
-            <Card>
-              <h4 className="font-bold text-navy-700 mb-3">الاستيفاءات المطلوبة</h4>
+            <Card title="الاستيفاءات المطلوبة">
               <div className="flex flex-col gap-2">
                 {FIXED_FULFILLMENTS.map((item,i)=>(
                   <button key={i} onClick={()=>toggleItem('fulfillments',item)} className={`text-sm px-3 py-2.5 rounded-lg border text-right flex items-start gap-2 transition-colors ${data.fulfillments.includes(item)?'bg-emerald-50 text-emerald-800 border-emerald-300':'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>
@@ -600,7 +513,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
               </div>
             </Card>
             <Card>
-              <Row label="ملاحظات إضافية من المحلل"><textarea value={data.analyst_notes||''} onChange={e=>set('analyst_notes',e.target.value)} rows={4} placeholder="أي ملاحظات أو تحفظات..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy-400 mt-1"/></Row>
+              <Row label="ملاحظات إضافية من المحلل"><TA value={data.analyst_notes} onChange={v=>set('analyst_notes',v)} rows={4} placeholder="أي ملاحظات أو تحفظات..."/></Row>
             </Card>
           </div>
 
