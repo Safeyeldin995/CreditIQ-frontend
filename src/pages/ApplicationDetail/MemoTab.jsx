@@ -1,33 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../supabase'
 import { useToast } from '../../components/Toast'
-import { Printer, CheckCircle, XCircle, RefreshCw, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, RefreshCw, FileText, AlertTriangle } from 'lucide-react'
 
-function parseJson(value, fallback) {
-  if (!value) return fallback
-  if (typeof value !== 'string') return value
-  try { return JSON.parse(value) }
-  catch { return fallback }
-}
+const FINAL_DECISIONS = [
+  { key: 'approved', label: 'اعتماد', appStatus: 'approved', icon: CheckCircle, className: 'btn-success' },
+  { key: 'approved_with_conditions', label: 'اعتماد بشروط', appStatus: 'approved', icon: AlertTriangle, className: 'btn-primary' },
+  { key: 'rejected', label: 'رفض', appStatus: 'rejected', icon: XCircle, className: 'btn-danger' },
+]
 
-function parseList(value) {
-  const parsed = parseJson(value, value)
-  if (Array.isArray(parsed)) return parsed.filter(Boolean)
-  if (typeof parsed === 'string') {
-    return parsed
-      .split(/\|\||\n|،|,/)
-      .map(item => item.trim())
-      .filter(Boolean)
-  }
-  return []
+const STATUS_LABELS = {
+  approved: 'تم الاعتماد',
+  approved_with_conditions: 'تم الاعتماد بشروط',
+  rejected: 'تم الرفض',
+  pending_review: 'بانتظار القرار النهائي',
 }
 
 export default function MemoTab({ application, lang, onStatusChange }) {
   const [decision, setDecision] = useState(null)
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
-  const [approving, setApproving] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(null) // 'approve' | 'reject'
+  const [saving, setSaving] = useState(false)
+  const [confirmDecision, setConfirmDecision] = useState(null)
   const toast = useToast()
   const pollingRef = useRef(null)
 
@@ -52,40 +46,27 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     setLoading(false)
   }
 
-  const handleDecision = async (type) => {
+  const handleFinalDecision = async () => {
+    if (!confirmDecision) return
     if (notes.trim().length < 10) {
-      toast(lang === 'ar' ? 'يجب كتابة ملاحظات (10 أحرف على الأقل)' : 'Notes required (min 10 characters)', 'error')
+      toast(lang === 'ar' ? 'يجب كتابة ملاحظات القرار النهائي (10 أحرف على الأقل)' : 'Final decision notes required', 'error')
       return
     }
-    setApproving(true)
-    const newStatus = type === 'approve' ? 'approved' : 'rejected'
+    setSaving(true)
     const [applicationResult, decisionResult] = await Promise.all([
-      supabase.from('applications').update({ status: newStatus }).eq('id', application.id),
-      supabase.from('risk_decision').update({ status: newStatus, team_head_notes: notes }).eq('id', decision.id),
+      supabase.from('applications').update({ status: confirmDecision.appStatus }).eq('id', application.id),
+      supabase.from('risk_decision').update({ status: confirmDecision.key, team_head_notes: notes }).eq('id', decision.id),
     ])
     if (applicationResult.error || decisionResult.error) {
-      toast(
-        lang === 'ar'
-          ? 'تعذر حفظ قرار الاعتماد'
-          : 'Unable to save approval decision',
-        'error'
-      )
-      setApproving(false)
+      toast(lang === 'ar' ? 'تعذر حفظ القرار النهائي' : 'Unable to save final decision', 'error')
+      setSaving(false)
       return
     }
-    toast(
-      lang === 'ar'
-        ? (type === 'approve' ? 'تم اعتماد القرار بنجاح ✓' : 'تم رفض الطلب')
-        : (type === 'approve' ? 'Decision approved ✓' : 'Application rejected'),
-      type === 'approve' ? 'success' : 'warning'
-    )
-    setShowConfirm(null)
-    setApproving(false)
+    toast(lang === 'ar' ? 'تم حفظ القرار النهائي' : 'Final decision saved', 'success')
+    setConfirmDecision(null)
+    setSaving(false)
+    await fetchDecision()
     onStatusChange?.()
-  }
-
-  const handlePrint = () => {
-    window.print()
   }
 
   if (loading) {
@@ -100,7 +81,7 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <FileText size={48} className="text-gray-200 mb-4" />
-        <p className="text-gray-400">{lang === 'ar' ? 'لم يتم توليد جواب المخاطر بعد' : 'Risk memo not generated yet'}</p>
+        <p className="text-gray-400">{lang === 'ar' ? 'لم يتم توليد توصية AI بعد' : 'AI recommendation not generated yet'}</p>
         <button onClick={fetchDecision} className="btn-ghost mt-4 flex items-center gap-2">
           <RefreshCw size={14} />
           {lang === 'ar' ? 'تحديث' : 'Refresh'}
@@ -109,150 +90,79 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     )
   }
 
-  const creditMemo = parseJson(decision.credit_memo_data, {}) || {}
-  const fulfillments = parseList(creditMemo.fulfillments || decision.fulfillments)
-  const collaterals = parseList(creditMemo.collaterals || decision.collaterals)
-  const memoText = decision.generated_memo || creditMemo.memo || ''
+  const isFinal = ['approved', 'approved_with_conditions', 'rejected'].includes(decision.status)
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Print header - only visible when printing */}
-      <div className="hidden print-only">
-        <div className="text-center mb-6 border-b-2 border-navy-900 pb-4">
-          <div className="text-4xl mb-2">🌍</div>
-          <h1 className="text-2xl font-black">جمعية المبادرة لتنمية المجتمعات المحلية والمشروعات الصغيرة</h1>
-          <p className="text-sm">المشهرة برقم 409 لسنة 2018 — ترخيص هيئة الرقابة المالية رقم 1245</p>
-          <p className="text-sm mt-1">رقم الملف: {application.reference_code} — التاريخ: {new Date().toLocaleDateString('ar-EG')}</p>
-        </div>
-      </div>
-
-      {/* Action bar - hidden when printing */}
-      <div className="flex items-center justify-between no-print">
-        <h3 className="section-title">
-          {lang === 'ar' ? 'جواب المخاطر الرسمي' : 'Official Risk Memo'}
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+        <h3 className="font-bold text-blue-900 mb-2">
+          {lang === 'ar' ? 'القرار النهائي بشري فقط' : 'Human final decision only'}
         </h3>
-        <button onClick={handlePrint} className="btn-ghost flex items-center gap-2">
-          <Printer size={16} />
-          {lang === 'ar' ? 'طباعة' : 'Print'}
-        </button>
+        <p className="text-sm text-blue-800 leading-7">
+          {lang === 'ar'
+            ? 'توصية AI استشارية ولا تمثل موافقة أو رفض. مسؤول أو مدير الائتمان هو صاحب القرار النهائي.'
+            : 'AI output is advisory and is not an approval or rejection. The credit analyst or manager owns the final decision.'}
+        </p>
       </div>
 
-      {/* Memo content */}
-      <div className="card p-8 memo-content" dir="rtl">
-        {memoText ? (
-          <pre className="whitespace-pre-wrap font-cairo text-sm leading-8 text-navy-800">{memoText}</pre>
+      <div className="card p-6">
+        <h4 className="font-bold text-navy-800 mb-3">
+          {lang === 'ar' ? 'ملاحظات القرار' : 'Decision Notes'}
+        </h4>
+        <textarea
+          className="input-field mb-4 min-h-32 resize-none"
+          placeholder={lang === 'ar' ? 'اكتب أسباب القرار النهائي والشروط إن وجدت... (مطلوب)' : 'Write final decision rationale and conditions if any... (required)'}
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          dir="rtl"
+          disabled={isFinal}
+        />
+
+        {!isFinal ? (
+          <div className="grid grid-cols-3 gap-3">
+            {FINAL_DECISIONS.map(item => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setConfirmDecision(item)}
+                  disabled={notes.trim().length < 10}
+                  className={`${item.className} flex items-center gap-2 justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  <Icon size={18} />
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
         ) : (
-          <div className="font-cairo text-sm leading-8 text-navy-800">
-            <h4 className="text-lg font-bold mb-4">جواب المخاطر</h4>
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              {[
-                ['اسم العميل', application.client_name_ar],
-                ['رقم الملف', application.reference_code],
-                ['الفرع', application.branch],
-                ['المبلغ الموصى به', decision.recommended_amount ? Number(decision.recommended_amount).toLocaleString('ar-EG') + ' جنيه' : '—'],
-                ['المدة', decision.recommended_tenor ? decision.recommended_tenor + ' شهر' : '—'],
-                ['درجة المخاطر', decision.risk_grade ? `${decision.risk_grade} (${decision.risk_score || 0}/100)` : '—'],
-              ].map(([label, value]) => (
-                <div key={label} className="border border-gray-200 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">{label}</p>
-                  <p className="font-bold">{value || '—'}</p>
-                </div>
-              ))}
+          <div className={`rounded-xl p-4 flex items-start gap-3 ${decision.status === 'rejected' ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+            {decision.status === 'rejected'
+              ? <XCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+              : <CheckCircle size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+            }
+            <div>
+              <p className={`font-bold ${decision.status === 'rejected' ? 'text-red-700' : 'text-emerald-700'}`}>
+                {STATUS_LABELS[decision.status] || decision.status}
+              </p>
+              {decision.team_head_notes && <p className="text-sm text-gray-600 mt-1">{decision.team_head_notes}</p>}
             </div>
-            <p className="font-bold mb-2">القرار: {decision.recommendation || '—'}</p>
-            {decision.strengths && <p className="whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{decision.strengths}</p>}
-            {decision.weaknesses && <p className="whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{decision.weaknesses}</p>}
-            {collaterals.length > 0 && <p className="mb-2"><span className="font-bold">الضمانات: </span>{collaterals.join(' — ')}</p>}
-            {fulfillments.length > 0 && (
-              <div>
-                <p className="font-bold">الاستيفاءات المطلوبة:</p>
-                <ol className="list-decimal list-inside">
-                  {fulfillments.map((item, i) => <li key={i}>{item}</li>)}
-                </ol>
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {/* Approval section - hidden when printing */}
-      {(!decision.status || decision.status === 'pending_review') && (
-        <div className="card p-6 no-print">
-          <h4 className="font-bold text-navy-800 mb-3">
-            {lang === 'ar' ? 'قرار الاعتماد' : 'Approval Decision'}
-          </h4>
-          <textarea
-            className="input-field mb-4 min-h-24 resize-none"
-            placeholder={lang === 'ar' ? 'اكتب ملاحظاتك هنا... (مطلوب — 10 أحرف على الأقل)' : 'Write your notes here... (required, min 10 characters)'}
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            dir="rtl"
-          />
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowConfirm('approve')}
-              disabled={notes.trim().length < 10}
-              className="btn-success flex items-center gap-2 flex-1 justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CheckCircle size={18} />
-              {lang === 'ar' ? 'اعتماد القرار' : 'Approve Decision'}
-            </button>
-            <button
-              onClick={() => setShowConfirm('reject')}
-              disabled={notes.trim().length < 10}
-              className="btn-danger flex items-center gap-2 flex-1 justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <XCircle size={18} />
-              {lang === 'ar' ? 'رفض الطلب' : 'Reject Application'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Status badge if already decided */}
-      {decision.status && decision.status !== 'pending_review' && (
-        <div className={`card p-4 no-print flex items-center gap-3 ${decision.status === 'approved' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-          {decision.status === 'approved'
-            ? <CheckCircle size={20} className="text-emerald-600" />
-            : <XCircle size={20} className="text-red-600" />
-          }
-          <div>
-            <p className={`font-bold ${decision.status === 'approved' ? 'text-emerald-700' : 'text-red-700'}`}>
-              {lang === 'ar'
-                ? (decision.status === 'approved' ? 'تم اعتماد القرار' : 'تم رفض الطلب')
-                : (decision.status === 'approved' ? 'Decision Approved' : 'Application Rejected')
-              }
-            </p>
-            {decision.team_head_notes && (
-              <p className="text-sm text-gray-600 mt-1">{decision.team_head_notes}</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation dialog */}
-      {showConfirm && (
+      {confirmDecision && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 no-print">
           <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl" dir="rtl">
-            <h3 className="text-xl font-bold text-navy-800 mb-3">
-              {showConfirm === 'approve'
-                ? (lang === 'ar' ? 'تأكيد الاعتماد' : 'Confirm Approval')
-                : (lang === 'ar' ? 'تأكيد الرفض' : 'Confirm Rejection')
-              }
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {lang === 'ar' ? 'الملاحظات: ' : 'Notes: '}{notes}
-            </p>
+            <h3 className="text-xl font-bold text-navy-800 mb-3">تأكيد القرار النهائي</h3>
+            <p className="text-gray-600 mb-2">القرار: {confirmDecision.label}</p>
+            <p className="text-gray-600 mb-4">الملاحظات: {notes}</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => handleDecision(showConfirm)}
-                disabled={approving}
-                className={showConfirm === 'approve' ? 'btn-success flex-1' : 'btn-danger flex-1'}
-              >
-                {approving ? '...' : (lang === 'ar' ? 'تأكيد' : 'Confirm')}
+              <button onClick={handleFinalDecision} disabled={saving} className={`${confirmDecision.className} flex-1`}>
+                {saving ? '...' : 'تأكيد'}
               </button>
-              <button onClick={() => setShowConfirm(null)} className="btn-ghost flex-1">
-                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+              <button onClick={() => setConfirmDecision(null)} className="btn-ghost flex-1">
+                إلغاء
               </button>
             </div>
           </div>
