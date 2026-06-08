@@ -7,6 +7,17 @@ const RELATIONS = ['زوجة', 'زوج', 'أخ', 'أخت', 'ابن', 'ابنة',
 const CALL_RESULTS = ['إيجابي', 'سلبي', 'لم يرد', 'وعد بالإعادة', 'رفض التحدث']
 const DECISIONS = ['موافقة', 'موافقة بشروط', 'رفض', 'إحالة للجنة']
 const COLLATERAL_OPTIONS = ['شيكات بنكية', 'شيكات بريدية', 'رهن حيازي', 'رهن عقاري', 'كفيل شخصي', 'عباءات مالية']
+const RISK_FLAG_OPTIONS = [
+  'التزامات مرتفعة مقارنة بالدخل',
+  'شيكات مرتجعة',
+  'تأخيرات ائتمانية متكررة',
+  'تحويلات أطراف ذات علاقة',
+  'تذبذب المبيعات',
+  'ضعف الضمانات',
+  'نقص مستندات قانونية',
+  'مخاطر تركّز موردين أو عملاء',
+  'نشاط غير مستقر',
+]
 const FIXED_FULFILLMENTS = [
   'توقيع جميع العقود والشيكات وفقاً لقرار العام رقم 93',
   'التوقيع خلال 7 أيام عمل بحد أقصى من تاريخ الإخطار',
@@ -66,6 +77,8 @@ const SECTIONS = [
   {id:'visit',label:'الزيارة الميدانية'},
   {id:'guarantors',label:'الضامنون'},
   {id:'calls',label:'المكالمات'},
+  {id:'risk-flags',label:'مؤشرات المخاطر'},
+  {id:'legal-review',label:'المراجعة القانونية'},
   {id:'fivecs',label:'تقييم الجدارة'},
   {id:'decision',label:'القرار النهائي'},
 ]
@@ -83,7 +96,7 @@ const INIT_BANK = {bank_name:'',account_type:'',period:'',avg_balance:'',has_ret
 
 const INIT = {
   client_age:'',
-  client_financial_assets:'',
+  client_financial_assets:'',net_worth:'',
   operation_rating:'',employee_count:'',legal_status:'',business_ownership:'',residence_ownership:'',has_tools:false,has_leverage:false,
   sales_specialist:'',sales_investigator:'',sales_manager:'',sales_proof:'',purchases_proof:'',monthly_expenses:'',
   capital_specialist:'',capital_investigator:'',capital_manager:'',
@@ -102,6 +115,9 @@ const INIT = {
   ai_iscore_grade:'',ai_iscore_score:'',ai_outstanding_loans:'',ai_returned_cheques:false,
   ai_ecr_value:'',ai_monthly_sales:'',ai_monthly_purchases:'',ai_iscore_notes:'',
   ai_inquiries_count:'',
+  risk_flags:[],risk_flag_notes:'',
+  legal_register_valid:false,legal_tax_card_valid:false,legal_license_valid:false,legal_collateral_reviewed:false,
+  legal_litigation:false,legal_review_notes:'',
 }
 
 const n=(v)=>v===''||v===null||v===undefined?null:Number(v)||null
@@ -146,6 +162,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       setData(p=>({...p,...ex,...d,
         collaterals:ex.collaterals?ex.collaterals.split(',').filter(Boolean):[],
         fulfillments:ex.fulfillments?ex.fulfillments.split('||').filter(Boolean):[],
+        risk_flags:Array.isArray(d.risk_flags)?d.risk_flags:[],
       }))
       if(ex.bank_statement_data&&Object.keys(ex.bank_statement_data).length>0){
         const bd=ex.bank_statement_data
@@ -207,6 +224,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       bankData.has_returned_checks?'يوجد شيكات مرتدة في كشف الحساب':null,
       bankData.has_late_fees?'يوجد غرامات تأخير في كشف الحساب':null,
       bankData.self_transfers?'يوجد تحويلات ذاتية تحتاج تفسير':null,
+      ...list(data.risk_flags),
     ].filter(Boolean)
     const missingData=[
       !payload.client_age?'سن العميل غير مسجل':null,
@@ -223,6 +241,8 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       scores.cap>=4?'رأس المال والملاءة يدعمان الطلب':null,
       scores.cond>=4?'ظروف النشاط والوضع القانوني مناسبة':null,
       payload.ai_monthly_sales?'تم تسجيل مبيعات شهرية مثبتة':null,
+      data.net_worth?'تم تسجيل صافي ثروة يدعم القدرة المالية':null,
+      data.legal_register_valid&&data.legal_tax_card_valid?'المراجعة القانونية الأساسية مكتملة':null,
     ].filter(Boolean)
     const weaknesses=[
       scores.char<3?'تقييم شخصية العميل يحتاج تدعيم':null,
@@ -231,11 +251,14 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       scores.cap<3?'رأس المال أو ملكية النشاط غير كافية بالكامل':null,
       scores.cond<3?'ظروف التشغيل أو الوضع القانوني تحتاج استيفاء':null,
       bankData.empty_months?'توجد شهور بدون معاملات في كشف الحساب':null,
+      data.risk_flag_notes?data.risk_flag_notes:null,
     ].filter(Boolean)
     const threats=[
       fraudFlags.length?'مؤشرات مخاطر تستلزم تحقق قبل التوقيع':null,
       payload.ai_outstanding_loans?'توجد التزامات قائمة يجب احتسابها ضمن القدرة على السداد':null,
       bankData.has_loans_on_statement?'توجد تمويلات ظاهرة على كشف الحساب':null,
+      data.legal_litigation?'توجد نزاعات أو دعاوى قانونية تحتاج مراجعة':null,
+      !data.legal_collateral_reviewed?'لم يتم تأكيد قابلية تنفيذ الضمانات قانونياً':null,
     ].filter(Boolean)
     const guarantors=[
       payload.g1_name?`${payload.g1_name} — ${payload.g1_relation||'صلة غير محددة'} — ${payload.g1_employer||'بيانات العباءة المالية غير مكتملة'}`:null,
@@ -252,6 +275,23 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       guarantor3_text:'لا يوجد',
       fulfillments:list(data.fulfillments),
       collaterals:list(data.collaterals),
+      risk_flags:list(data.risk_flags),
+      risk_flag_notes:data.risk_flag_notes||'',
+      legal_review:{
+        register_valid:data.legal_register_valid,
+        tax_card_valid:data.legal_tax_card_valid,
+        license_valid:data.legal_license_valid,
+        collateral_reviewed:data.legal_collateral_reviewed,
+        litigation:data.legal_litigation,
+        notes:data.legal_review_notes||'',
+      },
+      ai_summary:{
+        strengths,
+        weaknesses,
+        risks:threats,
+        conditions:list(data.fulfillments),
+        advisory_recommendation:payload.analyst_decision,
+      },
     }
     const generatedMemo=[
       'جواب المخاطر',
@@ -333,6 +373,17 @@ export default function AnalystDrawer({application,onClose,onSaved}){
     }
     const five_cs_details={}
     Object.values(FIVE_CS_ITEMS).forEach(c=>c.items.forEach(i=>{five_cs_details[i.key]=data[i.key]||0}))
+    Object.assign(five_cs_details,{
+      net_worth:n(data.net_worth),
+      risk_flags:list(data.risk_flags),
+      risk_flag_notes:data.risk_flag_notes||'',
+      legal_register_valid:data.legal_register_valid,
+      legal_tax_card_valid:data.legal_tax_card_valid,
+      legal_license_valid:data.legal_license_valid,
+      legal_collateral_reviewed:data.legal_collateral_reviewed,
+      legal_litigation:data.legal_litigation,
+      legal_review_notes:data.legal_review_notes||'',
+    })
     const bankData={...bank,avg_balance:bank.avg_balance||calcAvgCredit()}
 
     const payload={
@@ -491,6 +542,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
               <G2>
                 <Row label="المبيعات الشهرية المثبتة (جنيه)"><Inp type="number" value={data.ai_monthly_sales} onChange={v=>set('ai_monthly_sales',v)}/></Row>
                 <Row label="المشتريات الشهرية (جنيه)"><Inp type="number" value={data.ai_monthly_purchases} onChange={v=>set('ai_monthly_purchases',v)}/></Row>
+                <Row label="صافي الثروة (جنيه)"><Inp type="number" value={data.net_worth} onChange={v=>set('net_worth',v)} placeholder="إجمالي الأصول ناقص الالتزامات"/></Row>
               </G2>
             </Card>
           </div>
@@ -624,6 +676,38 @@ export default function AnalystDrawer({application,onClose,onSaved}){
             <Card>
               <Toggle label="مكالمة الموردين" value={data.suppliers_called} onChange={v=>set('suppliers_called',v)}/>
               {data.suppliers_called&&<div className="mt-3"><Row label="ملاحظات الموردين"><TA value={data.suppliers_notes} onChange={v=>set('suppliers_notes',v)}/></Row></div>}
+            </Card>
+          </div>
+
+          {/* RISK FLAGS SECTION */}
+          <div id="section-risk-flags">
+            <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">مؤشرات المخاطر</h2>
+            <Card title="اختر مؤشرات المخاطر اليدوية">
+              <div className="grid grid-cols-3 gap-2">
+                {RISK_FLAG_OPTIONS.map(item=>(
+                  <button key={item} onClick={()=>toggleItem('risk_flags',item)} className={`text-sm px-3 py-2.5 rounded-lg border text-right transition-colors ${data.risk_flags.includes(item)?'bg-red-50 text-red-800 border-red-300':'bg-white text-gray-600 border-gray-200 hover:border-red-300'}`}>
+                    {data.risk_flags.includes(item)?'✓ ':'○ '}{item}
+                  </button>
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <Row label="ملاحظات مؤشرات المخاطر"><TA value={data.risk_flag_notes} onChange={v=>set('risk_flag_notes',v)} rows={4} placeholder="اكتب أي مخاطر إضافية أو تفسير للمؤشرات المختارة..."/></Row>
+            </Card>
+          </div>
+
+          {/* LEGAL REVIEW SECTION */}
+          <div id="section-legal-review">
+            <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">المراجعة القانونية</h2>
+            <Card>
+              <Toggle label="السجل التجاري ساري ومطابق للنشاط" value={data.legal_register_valid} onChange={v=>set('legal_register_valid',v)}/>
+              <Toggle label="البطاقة الضريبية سارية" value={data.legal_tax_card_valid} onChange={v=>set('legal_tax_card_valid',v)}/>
+              <Toggle label="التراخيص أو التصاريح المطلوبة متوفرة" value={data.legal_license_valid} onChange={v=>set('legal_license_valid',v)}/>
+              <Toggle label="تمت مراجعة قابلية تنفيذ الضمانات" value={data.legal_collateral_reviewed} onChange={v=>set('legal_collateral_reviewed',v)}/>
+              <Toggle label="توجد دعاوى أو نزاعات قانونية" value={data.legal_litigation} onChange={v=>set('legal_litigation',v)}/>
+            </Card>
+            <Card>
+              <Row label="ملاحظات المراجعة القانونية"><TA value={data.legal_review_notes} onChange={v=>set('legal_review_notes',v)} rows={4} placeholder="اكتب ملاحظات السجل، الضرائب، التراخيص، الضمانات، أو أي نزاعات..."/></Row>
             </Card>
           </div>
 

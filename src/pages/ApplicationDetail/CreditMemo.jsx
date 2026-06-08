@@ -2,6 +2,32 @@ import { useState, useEffect } from 'react'
 import { supabase, formatAmount } from '../../supabase'
 import { Printer, X } from 'lucide-react'
 
+function parseJson(value, fallback) {
+  if (!value) return fallback
+  if (typeof value !== 'string') return value
+  try { return JSON.parse(value) }
+  catch { return fallback }
+}
+
+function parseList(value) {
+  const parsed = parseJson(value, value)
+  if (Array.isArray(parsed)) return parsed.filter(Boolean)
+  if (typeof parsed === 'string') {
+    return parsed
+      .split(/\|\||\n|،|,/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+const FINAL_STATUS_LABELS = {
+  approved: 'اعتماد',
+  approved_with_conditions: 'اعتماد بشروط',
+  rejected: 'رفض',
+  pending_review: 'بانتظار القرار النهائي',
+}
+
 function calcCheques(amount, tenorMonths, interestRate, adminFee = 0.015) {
   const principal = Number(amount) || 0
   const months = Number(tenorMonths) || 12
@@ -37,6 +63,7 @@ function getInterestRate(amount) {
 
 export default function CreditMemo({ application, onClose }) {
   const [assessment, setAssessment] = useState(null)
+  const [decision, setDecision] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -44,12 +71,22 @@ export default function CreditMemo({ application, onClose }) {
   }, [application.id])
 
   async function loadData() {
-    const { data } = await supabase
-      .from('analyst_assessments')
-      .select('*')
-      .eq('application_id', application.id)
-      .single()
-    if (data) setAssessment(data)
+    const [{ data: assessmentData }, { data: decisionData }] = await Promise.all([
+      supabase
+        .from('analyst_assessments')
+        .select('*')
+        .eq('application_id', application.id)
+        .maybeSingle(),
+      supabase
+        .from('risk_decision')
+        .select('*')
+        .eq('application_id', application.id)
+        .order('generated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+    if (assessmentData) setAssessment(assessmentData)
+    if (decisionData) setDecision(decisionData)
     setLoading(false)
   }
 
@@ -75,6 +112,18 @@ export default function CreditMemo({ application, onClose }) {
   const { cheques, totalAmount, monthlyInstallment } = calcCheques(amount, application.tenor_months, rate)
   const fulfillments = assessment.fulfillments ? assessment.fulfillments.split('||').filter(Boolean) : []
   const collaterals = assessment.collaterals ? assessment.collaterals.split(',').filter(Boolean) : []
+  const details = parseJson(assessment.five_cs_details, {}) || {}
+  const aiMemo = parseJson(decision?.credit_memo_data, {}) || {}
+  const riskFlags = [...parseList(details.risk_flags), ...parseList(aiMemo.risk_flags)]
+  const legalReview = aiMemo.legal_review || {
+    register_valid: details.legal_register_valid,
+    tax_card_valid: details.legal_tax_card_valid,
+    license_valid: details.legal_license_valid,
+    collateral_reviewed: details.legal_collateral_reviewed,
+    litigation: details.legal_litigation,
+    notes: details.legal_review_notes,
+  }
+  const aiConditions = parseList(aiMemo.conditions || aiMemo.fulfillments)
   const today = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
@@ -203,6 +252,88 @@ export default function CreditMemo({ application, onClose }) {
               <p className="whitespace-pre-wrap">{assessment.analyst_notes}</p>
             </div>
           )}
+
+          {/* Risk Flags */}
+          <div className="mb-6">
+            <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">مؤشرات المخاطر</h3>
+            {riskFlags.length > 0 ? (
+              <ul className="space-y-1 text-sm">
+                {riskFlags.map((flag, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="font-bold text-red-600">{i + 1}/</span>
+                    <span>{flag}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">لا توجد مؤشرات مخاطر مسجلة.</p>
+            )}
+            {details.risk_flag_notes && (
+              <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{details.risk_flag_notes}</p>
+            )}
+          </div>
+
+          {/* Legal Review */}
+          <div className="mb-6">
+            <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">المراجعة القانونية</h3>
+            <table className="w-full border-collapse border border-gray-300 text-sm">
+              <tbody>
+                {[
+                  ['السجل التجاري ساري ومطابق', legalReview.register_valid ? 'نعم' : 'لا'],
+                  ['البطاقة الضريبية سارية', legalReview.tax_card_valid ? 'نعم' : 'لا'],
+                  ['التراخيص متوفرة', legalReview.license_valid ? 'نعم' : 'لا'],
+                  ['قابلية تنفيذ الضمانات مراجعة', legalReview.collateral_reviewed ? 'نعم' : 'لا'],
+                  ['توجد دعاوى أو نزاعات', legalReview.litigation ? 'نعم' : 'لا'],
+                ].map(([label, value]) => (
+                  <tr key={label} className="border border-gray-300">
+                    <td className="font-bold bg-gray-50 px-4 py-2 w-56 border-l border-gray-300">{label}</td>
+                    <td className="px-4 py-2">{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {legalReview.notes && (
+              <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{legalReview.notes}</p>
+            )}
+          </div>
+
+          {/* AI Recommendation Summary */}
+          <div className="mb-6">
+            <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">ملخص توصية AI الاستشارية</h3>
+            <p className="text-xs text-gray-500 mb-3">توصية AI استشارية فقط ولا تمثل قرار اعتماد أو رفض.</p>
+            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+              <div className="bg-gray-50 rounded p-3">
+                <p className="font-bold mb-1">التوصية الاستشارية</p>
+                <p>{decision?.recommendation || '—'}</p>
+              </div>
+              <div className="bg-gray-50 rounded p-3">
+                <p className="font-bold mb-1">درجة الثقة</p>
+                <p>{decision?.confidence_score ? Math.round(Number(decision.confidence_score) <= 1 ? Number(decision.confidence_score) * 100 : Number(decision.confidence_score)) + '%' : 'غير متاح'}</p>
+              </div>
+            </div>
+            {decision?.strengths && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{decision.strengths}</p>}
+            {decision?.weaknesses && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{decision.weaknesses}</p>}
+            {decision?.threats && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">المخاطر: </span>{decision.threats}</p>}
+            {aiConditions.length > 0 && (
+              <div className="text-sm">
+                <p className="font-bold mb-1">الشروط المقترحة:</p>
+                <ul className="list-disc list-inside">
+                  {aiConditions.map((condition, i) => <li key={i}>{condition}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Final Decision */}
+          <div className="mb-6">
+            <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">القرار النهائي</h3>
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
+              <p><span className="font-bold">القرار البشري النهائي: </span>{FINAL_STATUS_LABELS[decision?.status] || 'بانتظار القرار النهائي'}</p>
+              {decision?.team_head_notes && (
+                <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">ملاحظات القرار: </span>{decision.team_head_notes}</p>
+              )}
+            </div>
+          </div>
 
           {/* Signatures */}
           <div className="mt-12 grid grid-cols-2 gap-12">
