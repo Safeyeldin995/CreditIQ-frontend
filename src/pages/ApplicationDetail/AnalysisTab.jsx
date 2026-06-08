@@ -1,12 +1,50 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, GRADE_COLORS, formatAmount } from '../../supabase'
-import { AlertTriangle, FileX, RefreshCw, Printer } from 'lucide-react'
+import { AlertTriangle, CheckCircle, FileText, FileX, Printer, RefreshCw, ShieldCheck } from 'lucide-react'
 
 const RECOMMENDATION_STYLES = {
   'موافقة': 'bg-emerald-600 text-white',
   'موافقة بشروط': 'bg-blue-600 text-white',
   'رفض': 'bg-red-600 text-white',
   'إحالة للجنة': 'bg-amber-500 text-white',
+}
+
+function parseJson(value, fallback) {
+  if (!value) return fallback
+  if (typeof value !== 'string') return value
+  try { return JSON.parse(value) }
+  catch { return fallback }
+}
+
+function parseList(value) {
+  const parsed = parseJson(value, value)
+  if (Array.isArray(parsed)) return parsed.filter(Boolean)
+  if (typeof parsed === 'string') {
+    return parsed
+      .split(/\|\||\n|،|,/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+function formatValue(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  return value
+}
+
+function StatusPill({ status }) {
+  const labels = {
+    pending_review: 'بانتظار اعتماد رئيس الفريق',
+    approved: 'تم الاعتماد',
+    rejected: 'مرفوض',
+  }
+  const color = status === 'approved'
+    ? 'bg-emerald-100 text-emerald-700'
+    : status === 'rejected'
+      ? 'bg-red-100 text-red-700'
+      : 'bg-amber-100 text-amber-700'
+  return <span className={`badge ${color}`}>{labels[status] || status || 'بانتظار المراجعة'}</span>
 }
 
 export default function AnalysisTab({ application, lang }) {
@@ -28,7 +66,7 @@ export default function AnalysisTab({ application, lang }) {
       .eq('application_id', application.id)
       .order('generated_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
     if (data) {
       setDecision(data)
       clearInterval(pollingRef.current)
@@ -58,25 +96,14 @@ export default function AnalysisTab({ application, lang }) {
     )
   }
 
-  const fraudFlags = (() => {
-    try { return typeof decision.fraud_flags === 'string' ? JSON.parse(decision.fraud_flags) : (decision.fraud_flags || []) }
-    catch { return [] }
-  })()
-
-  const missingDocs = (() => {
-    try { return typeof decision.missing_documents === 'string' ? JSON.parse(decision.missing_documents) : (decision.missing_documents || []) }
-    catch { return [] }
-  })()
-
-  const missingData = (() => {
-    try { return typeof decision.missing_data === 'string' ? JSON.parse(decision.missing_data) : (decision.missing_data || []) }
-    catch { return [] }
-  })()
-
-  const creditMemo = (() => {
-    try { return typeof decision.credit_memo_data === 'string' ? JSON.parse(decision.credit_memo_data) : (decision.credit_memo_data || {}) }
-    catch { return {} }
-  })()
+  const fraudFlags = parseList(decision.fraud_flags)
+  const missingDocs = parseList(decision.missing_documents)
+  const missingData = parseList(decision.missing_data)
+  const creditMemo = parseJson(decision.credit_memo_data, {}) || {}
+  const fulfillments = parseList(creditMemo.fulfillments || decision.fulfillments)
+  const collaterals = parseList(creditMemo.collaterals || decision.collaterals)
+  const guarantors = parseList(creditMemo.guarantors)
+  const memoText = decision.generated_memo || creditMemo.memo || ''
 
   const recStyle = RECOMMENDATION_STYLES[decision.recommendation] || 'bg-gray-600 text-white'
 
@@ -112,6 +139,19 @@ export default function AnalysisTab({ application, lang }) {
                 {decision.recommendation || '—'}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2 mt-4">
+              <StatusPill status={decision.status} />
+              {decision.generated_at && (
+                <span className="text-xs text-gray-400">
+                  تاريخ التحليل: {new Date(decision.generated_at).toLocaleString('ar-EG')}
+                </span>
+              )}
+              {decision.team_head_notes && (
+                <span className="text-xs text-navy-600 bg-navy-50 rounded-full px-3 py-1">
+                  ملاحظات الاعتماد: {decision.team_head_notes}
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
               <div className="text-center">
                 <p className="text-xs text-gray-400 mb-1">المبلغ الموصى به</p>
@@ -126,6 +166,69 @@ export default function AnalysisTab({ application, lang }) {
                 <p className="font-bold text-navy-800">{decision.recommended_tenor ? `${decision.recommended_tenor} شهر` : '—'}</p>
               </div>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="card p-5">
+              <h3 className="font-bold text-navy-800 text-sm mb-3 flex items-center gap-2">
+                <ShieldCheck size={15} /> الضمانات المطلوبة
+              </h3>
+              {collaterals.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {collaterals.map((item, i) => (
+                    <span key={i} className="badge bg-navy-50 text-navy-700">{item}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">لم يتم تحديد ضمانات إضافية</p>
+              )}
+            </div>
+            <div className="card p-5">
+              <h3 className="font-bold text-navy-800 text-sm mb-3 flex items-center gap-2">
+                <CheckCircle size={15} /> الاستيفاءات قبل التوقيع
+              </h3>
+              {fulfillments.length > 0 ? (
+                <ol className="list-decimal list-inside flex flex-col gap-1 text-sm text-gray-700">
+                  {fulfillments.map((item, i) => <li key={i}>{item}</li>)}
+                </ol>
+              ) : (
+                <p className="text-sm text-gray-400">لا توجد استيفاءات مسجلة</p>
+              )}
+            </div>
+          </div>
+
+          <div className="card p-5">
+            <h3 className="font-bold text-navy-800 text-sm mb-3 flex items-center gap-2">
+              <FileText size={15} /> بيانات جواب الموافقة
+            </h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">حق الإدارة والتوقيع</p>
+                <p className="font-semibold text-navy-800">{formatValue(creditMemo.signatory)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">الغرض من التمويل</p>
+                <p className="font-semibold text-navy-800">{formatValue(creditMemo.purpose || application.purpose)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">المبلغ كتابة</p>
+                <p className="font-semibold text-navy-800">{formatValue(creditMemo.approved_amount_text)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">المدة كتابة</p>
+                <p className="font-semibold text-navy-800">{formatValue(creditMemo.tenor_text)}</p>
+              </div>
+            </div>
+            {guarantors.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-400 mb-2">الضامنون</p>
+                <div className="flex flex-col gap-2">
+                  {guarantors.map((item, i) => (
+                    <div key={i} className="text-sm bg-navy-50 text-navy-800 rounded-lg p-3">{item}</div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Strengths */}
@@ -222,6 +325,10 @@ export default function AnalysisTab({ application, lang }) {
 
           {/* Credit memo */}
           <div className="bg-white border border-gray-200 rounded-xl p-6 font-arabic print:shadow-none" dir="rtl">
+            {memoText ? (
+              <pre className="whitespace-pre-wrap font-cairo text-sm leading-8 text-navy-800">{memoText}</pre>
+            ) : (
+              <>
 
             {/* Header */}
             <div className="text-center mb-6 border-b pb-4">
@@ -294,6 +401,8 @@ export default function AnalysisTab({ application, lang }) {
               </div>
             </div>
 
+              </>
+            )}
           </div>
         </div>
       )}

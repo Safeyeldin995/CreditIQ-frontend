@@ -3,6 +3,25 @@ import { supabase } from '../../supabase'
 import { useToast } from '../../components/Toast'
 import { Printer, CheckCircle, XCircle, RefreshCw, FileText } from 'lucide-react'
 
+function parseJson(value, fallback) {
+  if (!value) return fallback
+  if (typeof value !== 'string') return value
+  try { return JSON.parse(value) }
+  catch { return fallback }
+}
+
+function parseList(value) {
+  const parsed = parseJson(value, value)
+  if (Array.isArray(parsed)) return parsed.filter(Boolean)
+  if (typeof parsed === 'string') {
+    return parsed
+      .split(/\|\||\n|،|,/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
 export default function MemoTab({ application, lang, onStatusChange }) {
   const [decision, setDecision] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -25,7 +44,7 @@ export default function MemoTab({ application, lang, onStatusChange }) {
       .eq('application_id', application.id)
       .order('generated_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
     if (data) {
       setDecision(data)
       clearInterval(pollingRef.current)
@@ -40,10 +59,20 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     }
     setApproving(true)
     const newStatus = type === 'approve' ? 'approved' : 'rejected'
-    await Promise.all([
+    const [applicationResult, decisionResult] = await Promise.all([
       supabase.from('applications').update({ status: newStatus }).eq('id', application.id),
       supabase.from('risk_decision').update({ status: newStatus, team_head_notes: notes }).eq('id', decision.id),
     ])
+    if (applicationResult.error || decisionResult.error) {
+      toast(
+        lang === 'ar'
+          ? 'تعذر حفظ قرار الاعتماد'
+          : 'Unable to save approval decision',
+        'error'
+      )
+      setApproving(false)
+      return
+    }
     toast(
       lang === 'ar'
         ? (type === 'approve' ? 'تم اعتماد القرار بنجاح ✓' : 'تم رفض الطلب')
@@ -80,6 +109,11 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     )
   }
 
+  const creditMemo = parseJson(decision.credit_memo_data, {}) || {}
+  const fulfillments = parseList(creditMemo.fulfillments || decision.fulfillments)
+  const collaterals = parseList(creditMemo.collaterals || decision.collaterals)
+  const memoText = decision.generated_memo || creditMemo.memo || ''
+
   return (
     <div className="flex flex-col gap-6">
       {/* Print header - only visible when printing */}
@@ -105,13 +139,44 @@ export default function MemoTab({ application, lang, onStatusChange }) {
 
       {/* Memo content */}
       <div className="card p-8 memo-content" dir="rtl">
-        <pre className="whitespace-pre-wrap font-cairo text-sm leading-8 text-navy-800">
-          {decision.generated_memo || lang === 'ar' ? 'لا يوجد محتوى' : 'No content'}
-        </pre>
+        {memoText ? (
+          <pre className="whitespace-pre-wrap font-cairo text-sm leading-8 text-navy-800">{memoText}</pre>
+        ) : (
+          <div className="font-cairo text-sm leading-8 text-navy-800">
+            <h4 className="text-lg font-bold mb-4">جواب المخاطر</h4>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {[
+                ['اسم العميل', application.client_name_ar],
+                ['رقم الملف', application.reference_code],
+                ['الفرع', application.branch],
+                ['المبلغ الموصى به', decision.recommended_amount ? Number(decision.recommended_amount).toLocaleString('ar-EG') + ' جنيه' : '—'],
+                ['المدة', decision.recommended_tenor ? decision.recommended_tenor + ' شهر' : '—'],
+                ['درجة المخاطر', decision.risk_grade ? `${decision.risk_grade} (${decision.risk_score || 0}/100)` : '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{label}</p>
+                  <p className="font-bold">{value || '—'}</p>
+                </div>
+              ))}
+            </div>
+            <p className="font-bold mb-2">القرار: {decision.recommendation || '—'}</p>
+            {decision.strengths && <p className="whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{decision.strengths}</p>}
+            {decision.weaknesses && <p className="whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{decision.weaknesses}</p>}
+            {collaterals.length > 0 && <p className="mb-2"><span className="font-bold">الضمانات: </span>{collaterals.join(' — ')}</p>}
+            {fulfillments.length > 0 && (
+              <div>
+                <p className="font-bold">الاستيفاءات المطلوبة:</p>
+                <ol className="list-decimal list-inside">
+                  {fulfillments.map((item, i) => <li key={i}>{item}</li>)}
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Approval section - hidden when printing */}
-      {decision.status === 'pending_review' && (
+      {(!decision.status || decision.status === 'pending_review') && (
         <div className="card p-6 no-print">
           <h4 className="font-bold text-navy-800 mb-3">
             {lang === 'ar' ? 'قرار الاعتماد' : 'Approval Decision'}
@@ -145,7 +210,7 @@ export default function MemoTab({ application, lang, onStatusChange }) {
       )}
 
       {/* Status badge if already decided */}
-      {decision.status !== 'pending_review' && (
+      {decision.status && decision.status !== 'pending_review' && (
         <div className={`card p-4 no-print flex items-center gap-3 ${decision.status === 'approved' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
           {decision.status === 'approved'
             ? <CheckCircle size={20} className="text-emerald-600" />
