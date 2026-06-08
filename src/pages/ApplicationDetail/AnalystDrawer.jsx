@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, N8N_ANALYZE_WEBHOOK } from '../../supabase'
+import { supabase, N8N_ANALYZE_WEBHOOK, formatAmount } from '../../supabase'
 import { useToast } from '../../components/Toast'
 import { Save, ChevronLeft, Plus, Trash2 } from 'lucide-react'
 
@@ -19,6 +19,8 @@ const FIXED_FULFILLMENTS = [
   'كتابة اسم الشركات المنتجة للبضاعة الموجودة بالكشف',
   'عمل رهن بسجل الضمانات المنقولة وفقاً لملحق عقد الضمان',
 ]
+
+const MAX_SCORE = 24.5
 
 const FIVE_CS_ITEMS = {
   character: { label: 'شخصية العميل', max: 5, items: [
@@ -103,6 +105,24 @@ const INIT = {
 }
 
 const n=(v)=>v===''||v===null||v===undefined?null:Number(v)||null
+const clean=(v)=>String(v||'').trim()
+const list=(v)=>Array.isArray(v)?v.filter(Boolean):[]
+
+function interestRateFor(amount){
+  const a=Number(amount)||0
+  if(a<=1000000)return 22.5
+  if(a<=5000000)return 21
+  return 20
+}
+
+function gradeFromRiskScore(score){
+  if(score>=85)return 'A'
+  if(score>=75)return 'B'
+  if(score>=65)return 'C'
+  if(score>=55)return 'D'
+  if(score>=45)return 'E'
+  return 'F'
+}
 
 export default function AnalystDrawer({application,onClose,onSaved}){
   const [data,setData]=useState(INIT)
@@ -110,6 +130,8 @@ export default function AnalystDrawer({application,onClose,onSaved}){
   const [saving,setSaving]=useState(false)
   const [existingId,setExistingId]=useState(null)
   const [activeSection,setActiveSection]=useState('client')
+  const [newCollateral,setNewCollateral]=useState('')
+  const [newFulfillment,setNewFulfillment]=useState('')
   const toast=useToast()
   const set=(k,v)=>setData(p=>({...p,[k]:v}))
   const setB=(k,v)=>setBank(p=>({...p,[k]:v}))
@@ -161,9 +183,154 @@ export default function AnalystDrawer({application,onClose,onSaved}){
 
   const toggleItem=(key,item)=>setData(p=>({...p,[key]:p[key].includes(item)?p[key].filter(c=>c!==item):[...p[key],item]}))
 
+  function addCustomItem(key,value,clear){
+    const item=clean(value)
+    if(!item)return
+    setData(p=>p[key].includes(item)?p:{...p,[key]:[...p[key],item]})
+    clear('')
+  }
+
+  function validateBeforeSave(scores){
+    if(!data.analyst_decision)return 'اختر القرار النهائي قبل توليد التحليل'
+    if(!clean(data.analyst_name))return 'اكتب اسم مسؤول المخاطر'
+    const amount=n(data.recommended_amount)||autoAmount(scores.total)
+    if(data.analyst_decision!=='رفض'&&!amount)return 'حدد المبلغ الموصى به أو أكمل تقييم الجدارة'
+    return null
+  }
+
+  function buildLocalDecision(payload,scores,bankData){
+    const recommendedAmount=payload.recommended_amount||autoAmount(scores.total)||null
+    const riskScore=Math.round((scores.total/MAX_SCORE)*100)
+    const riskGrade=gradeFromRiskScore(riskScore)
+    const fraudFlags=[
+      payload.ai_returned_cheques?'يوجد شيكات مرتجعة أو تعثر في الايسكور':null,
+      bankData.has_returned_checks?'يوجد شيكات مرتدة في كشف الحساب':null,
+      bankData.has_late_fees?'يوجد غرامات تأخير في كشف الحساب':null,
+      bankData.self_transfers?'يوجد تحويلات ذاتية تحتاج تفسير':null,
+    ].filter(Boolean)
+    const missingData=[
+      !payload.client_age?'سن العميل غير مسجل':null,
+      !payload.ai_iscore_grade?'تصنيف الايسكور غير مسجل':null,
+      !payload.ai_iscore_score?'الدرجة الرقمية للايسكور غير مسجلة':null,
+      !bankData.bank_name?'بيانات كشف الحساب غير مكتملة':null,
+      !payload.g1_name?'بيانات الضامن الأول غير مكتملة':null,
+      !payload.analyst_notes?'ملاحظات المحلل غير مسجلة':null,
+    ].filter(Boolean)
+    const strengths=[
+      scores.char>=4?'شخصية العميل مستقرة وفق تقييم 5Cs':null,
+      scores.credit>=4?'تاريخ ائتماني مقبول':null,
+      scores.col>=3?'ضمانات مناسبة لحجم التمويل':null,
+      scores.cap>=4?'رأس المال والملاءة يدعمان الطلب':null,
+      scores.cond>=4?'ظروف النشاط والوضع القانوني مناسبة':null,
+      payload.ai_monthly_sales?'تم تسجيل مبيعات شهرية مثبتة':null,
+    ].filter(Boolean)
+    const weaknesses=[
+      scores.char<3?'تقييم شخصية العميل يحتاج تدعيم':null,
+      scores.credit<3?'التاريخ الائتماني يحتاج مراجعة إضافية':null,
+      scores.col<2.5?'الضمانات المتاحة محدودة':null,
+      scores.cap<3?'رأس المال أو ملكية النشاط غير كافية بالكامل':null,
+      scores.cond<3?'ظروف التشغيل أو الوضع القانوني تحتاج استيفاء':null,
+      bankData.empty_months?'توجد شهور بدون معاملات في كشف الحساب':null,
+    ].filter(Boolean)
+    const threats=[
+      fraudFlags.length?'مؤشرات مخاطر تستلزم تحقق قبل التوقيع':null,
+      payload.ai_outstanding_loans?'توجد التزامات قائمة يجب احتسابها ضمن القدرة على السداد':null,
+      bankData.has_loans_on_statement?'توجد تمويلات ظاهرة على كشف الحساب':null,
+    ].filter(Boolean)
+    const guarantors=[
+      payload.g1_name?`${payload.g1_name} — ${payload.g1_relation||'صلة غير محددة'} — ${payload.g1_employer||'بيانات العباءة المالية غير مكتملة'}`:null,
+      payload.g2_name?`${payload.g2_name} — ${payload.g2_relation||'صلة غير محددة'} — ${payload.g2_employer||'بيانات العباءة المالية غير مكتملة'}`:null,
+    ].filter(Boolean)
+    const creditMemo={
+      signatory:'العميل منفرداً',
+      approved_amount_text:recommendedAmount?formatAmount(recommendedAmount):'—',
+      tenor_text:application.tenor_months?`${application.tenor_months} شهر`:'—',
+      purpose:application.purpose||'—',
+      guarantors,
+      guarantor1_text:guarantors[0]||'',
+      guarantor2_text:guarantors[1]||'',
+      guarantor3_text:'لا يوجد',
+      fulfillments:list(data.fulfillments),
+      collaterals:list(data.collaterals),
+    }
+    const generatedMemo=[
+      'جواب المخاطر',
+      '',
+      `اسم العميل: ${application.client_name_ar||'—'}`,
+      `رقم الملف: ${application.reference_code||'—'}`,
+      `الفرع: ${application.branch||'—'}`,
+      `نوع التمويل: ${application.product_type||'—'}`,
+      `المبلغ المطلوب: ${formatAmount(application.requested_amount)}`,
+      `المبلغ الموصى به: ${recommendedAmount?formatAmount(recommendedAmount):'—'}`,
+      `مدة التمويل: ${application.tenor_months||'—'} شهر`,
+      `درجة المخاطر: ${riskGrade} (${riskScore}/100)`,
+      `قرار مسؤول المخاطر: ${payload.analyst_decision}`,
+      '',
+      'نقاط القوة:',
+      strengths.length?strengths.map((s,i)=>`${i+1}. ${s}`).join('\n'):'لا توجد نقاط قوة مسجلة.',
+      '',
+      'نقاط الضعف والمخاطر:',
+      weaknesses.length?weaknesses.map((s,i)=>`${i+1}. ${s}`).join('\n'):'لا توجد نقاط ضعف جوهرية مسجلة.',
+      '',
+      'الضمانات المطلوبة:',
+      creditMemo.collaterals.length?creditMemo.collaterals.map((s,i)=>`${i+1}. ${s}`).join('\n'):'لا توجد ضمانات إضافية مسجلة.',
+      '',
+      'الاستيفاءات المطلوبة قبل التوقيع:',
+      creditMemo.fulfillments.length?creditMemo.fulfillments.map((s,i)=>`${i+1}. ${s}`).join('\n'):'لا توجد استيفاءات مسجلة.',
+      '',
+      `مسؤول المخاطر: ${payload.analyst_name||'—'}`,
+      payload.analyst_notes?`ملاحظات المحلل: ${payload.analyst_notes}`:'',
+    ].filter(line=>line!==null).join('\n')
+
+    return{
+      application_id:application.id,
+      risk_score:riskScore,
+      risk_grade:riskGrade,
+      recommendation:payload.analyst_decision,
+      recommended_amount:recommendedAmount,
+      recommended_tenor:application.tenor_months||null,
+      interest_rate:recommendedAmount?interestRateFor(recommendedAmount):null,
+      strengths:strengths.join('\n')||'لا توجد نقاط قوة مسجلة.',
+      weaknesses:weaknesses.join('\n')||'لا توجد نقاط ضعف جوهرية مسجلة.',
+      threats:threats.join('\n')||'لا توجد تهديدات إضافية مسجلة.',
+      fraud_flags:fraudFlags,
+      missing_documents:[],
+      missing_data:missingData,
+      credit_memo_data:creditMemo,
+      generated_memo:generatedMemo,
+      status:'pending_review',
+      generated_at:new Date().toISOString(),
+    }
+  }
+
+  async function saveLocalDecision(payload,scores,bankData){
+    const localDecision=buildLocalDecision(payload,scores,bankData)
+    const {data:existing}=await supabase
+      .from('risk_decision')
+      .select('id')
+      .eq('application_id',application.id)
+      .order('generated_at',{ascending:false})
+      .limit(1)
+      .maybeSingle()
+    const decisionResult=existing
+      ? await supabase.from('risk_decision').update(localDecision).eq('id',existing.id)
+      : await supabase.from('risk_decision').insert(localDecision)
+    if(decisionResult.error)throw decisionResult.error
+    await supabase
+      .from('applications')
+      .update({status:'pending_approval',risk_grade:localDecision.risk_grade})
+      .eq('id',application.id)
+  }
+
   async function handleSave(){
     setSaving(true)
     const scores=calcScores()
+    const validationError=validateBeforeSave(scores)
+    if(validationError){
+      toast(validationError,'error')
+      setSaving(false)
+      return
+    }
     const five_cs_details={}
     Object.values(FIVE_CS_ITEMS).forEach(c=>c.items.forEach(i=>{five_cs_details[i.key]=data[i.key]||0}))
     const bankData={...bank,avg_balance:bank.avg_balance||calcAvgCredit()}
@@ -239,9 +406,14 @@ export default function AnalystDrawer({application,onClose,onSaved}){
 
     if(error){toast('خطأ: '+error.message,'error')}
     else{
-      fetch(N8N_ANALYZE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({application_id:application.id})}).catch(()=>{})
-      toast('تم حفظ التقييم وبدأ توليد جواب المخاطر ✓','success')
-      onSaved?.()
+      try{
+        await saveLocalDecision(payload,scores,bankData)
+        fetch(N8N_ANALYZE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({application_id:application.id})}).catch(()=>{})
+        toast('تم حفظ التقييم وتوليد جواب المخاطر ✓','success')
+        onSaved?.()
+      }catch(decisionError){
+        toast('تم حفظ التقييم، لكن تعذر توليد القرار: '+decisionError.message,'error')
+      }
     }
     setSaving(false)
   }
@@ -502,6 +674,12 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                   </button>
                 ))}
               </div>
+              <div className="flex gap-2 mt-3">
+                <Inp value={newCollateral} onChange={setNewCollateral} placeholder="ضمان آخر..." />
+                <button onClick={()=>addCustomItem('collaterals',newCollateral,setNewCollateral)} className="btn-ghost flex items-center gap-1 whitespace-nowrap">
+                  <Plus size={14}/>إضافة
+                </button>
+              </div>
             </Card>
             <Card title="الاستيفاءات المطلوبة">
               <div className="flex flex-col gap-2">
@@ -510,6 +688,12 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                     <span className="flex-shrink-0 font-bold">{data.fulfillments.includes(item)?'✓':'○'}</span><span>{item}</span>
                   </button>
                 ))}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <Inp value={newFulfillment} onChange={setNewFulfillment} placeholder="استيفاء آخر..." />
+                <button onClick={()=>addCustomItem('fulfillments',newFulfillment,setNewFulfillment)} className="btn-ghost flex items-center gap-1 whitespace-nowrap">
+                  <Plus size={14}/>إضافة
+                </button>
               </div>
             </Card>
             <Card>
