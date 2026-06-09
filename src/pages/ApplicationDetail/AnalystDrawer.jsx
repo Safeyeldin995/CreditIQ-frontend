@@ -5,7 +5,12 @@ import { Save, ChevronLeft, Plus, Trash2 } from 'lucide-react'
 
 const RELATIONS = ['زوجة', 'زوج', 'أخ', 'أخت', 'ابن', 'ابنة', 'صديق', 'شريك', 'جار', 'أخرى']
 const CALL_RESULTS = ['إيجابي', 'سلبي', 'لم يرد', 'وعد بالإعادة', 'رفض التحدث']
-const DECISIONS = ['موافقة', 'موافقة بشروط', 'رفض', 'إحالة للجنة']
+const RECOMMENDATIONS = ['توصية بالموافقة', 'توصية بالموافقة بشروط', 'توصية بالرفض', 'توصية بالإحالة للجنة']
+const GUARANTOR_STRENGTHS = [
+  { value: 'Weak', label: 'Weak' },
+  { value: 'Average', label: 'Average' },
+  { value: 'Strong', label: 'Strong' },
+]
 const COLLATERAL_OPTIONS = ['شيكات بنكية', 'شيكات بريدية', 'رهن حيازي', 'رهن عقاري', 'كفيل شخصي', 'عباءات مالية']
 const RISK_FLAG_OPTIONS = [
   'التزامات مرتفعة مقارنة بالدخل',
@@ -80,7 +85,7 @@ const SECTIONS = [
   {id:'risk-flags',label:'مؤشرات المخاطر'},
   {id:'legal-review',label:'المراجعة القانونية'},
   {id:'fivecs',label:'تقييم الجدارة'},
-  {id:'decision',label:'القرار النهائي'},
+  {id:'recommendation',label:'توصية المحلل'},
 ]
 
 function Row({label,children}){return(<div><label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>{children}</div>)}
@@ -100,8 +105,8 @@ const INIT = {
   operation_rating:'',employee_count:'',legal_status:'',business_ownership:'',residence_ownership:'',has_tools:false,has_leverage:false,
   sales_specialist:'',sales_investigator:'',sales_manager:'',sales_proof:'',purchases_proof:'',monthly_expenses:'',
   capital_specialist:'',capital_investigator:'',capital_manager:'',
-  g1_name:'',g1_age:'',g1_relation:'',g1_employer:'',
-  g2_name:'',g2_age:'',g2_relation:'',g2_employer:'',
+  g1_name:'',g1_age:'',g1_relation:'',g1_employer:'',g1_strength:'',
+  g2_name:'',g2_age:'',g2_relation:'',g2_employer:'',g2_strength:'',
   client_called:false,client_call_result:'',client_call_notes:'',
   g1_called:false,g1_call_result:'',g1_call_notes:'',
   g2_called:false,g2_call_result:'',g2_call_notes:'',
@@ -208,10 +213,10 @@ export default function AnalystDrawer({application,onClose,onSaved}){
   }
 
   function validateBeforeSave(scores){
-    if(!data.analyst_decision)return 'اختر القرار النهائي قبل توليد التحليل'
+    if(!data.analyst_decision)return 'اختر توصية المحلل قبل توليد توصية AI'
     if(!clean(data.analyst_name))return 'اكتب اسم مسؤول المخاطر'
     const amount=n(data.recommended_amount)||autoAmount(scores.total)
-    if(data.analyst_decision!=='رفض'&&!amount)return 'حدد المبلغ الموصى به أو أكمل تقييم الجدارة'
+    if(data.analyst_decision!=='توصية بالرفض'&&!amount)return 'حدد المبلغ الموصى به أو أكمل تقييم الجدارة'
     return null
   }
 
@@ -261,9 +266,10 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       !data.legal_collateral_reviewed?'لم يتم تأكيد قابلية تنفيذ الضمانات قانونياً':null,
     ].filter(Boolean)
     const guarantors=[
-      payload.g1_name?`${payload.g1_name} — ${payload.g1_relation||'صلة غير محددة'} — ${payload.g1_employer||'بيانات العباءة المالية غير مكتملة'}`:null,
-      payload.g2_name?`${payload.g2_name} — ${payload.g2_relation||'صلة غير محددة'} — ${payload.g2_employer||'بيانات العباءة المالية غير مكتملة'}`:null,
+      payload.g1_name?`${payload.g1_name} — ${payload.g1_relation||'صلة غير محددة'} — ${payload.g1_employer||'بيانات العباءة المالية غير مكتملة'} — قوة الضامن: ${data.g1_strength||'غير محددة'}`:null,
+      payload.g2_name?`${payload.g2_name} — ${payload.g2_relation||'صلة غير محددة'} — ${payload.g2_employer||'بيانات العباءة المالية غير مكتملة'} — قوة الضامن: ${data.g2_strength||'غير محددة'}`:null,
     ].filter(Boolean)
+    const advisoryRecommendation=scores.total>=20?'استمرار الدراسة مع مخاطر منخفضة':scores.total>=15?'استمرار الدراسة مع شروط تخفيف مخاطر':scores.total>=10?'استمرار الدراسة بحذر مع شروط قوية':'مخاطر مرتفعة تحتاج مراجعة مدير ائتمان'
     const creditMemo={
       signatory:'العميل منفرداً',
       approved_amount_text:recommendedAmount?formatAmount(recommendedAmount):'—',
@@ -286,15 +292,18 @@ export default function AnalystDrawer({application,onClose,onSaved}){
         notes:data.legal_review_notes||'',
       },
       ai_summary:{
+        summary:`مراجعة AI استشارية مبنية على بيانات التقييم المدخلة يدوياً. ${advisoryRecommendation}.`,
         strengths,
         weaknesses,
         risks:threats,
         conditions:list(data.fulfillments),
-        advisory_recommendation:payload.analyst_decision,
+        advisory_recommendation:advisoryRecommendation,
+        confidence_score:Math.min(95,Math.max(45,Math.round((scores.total/MAX_SCORE)*100))),
       },
+      analyst_recommendation:payload.analyst_decision,
     }
     const generatedMemo=[
-      'جواب المخاطر',
+      'ملخص توصية AI الاستشارية',
       '',
       `اسم العميل: ${application.client_name_ar||'—'}`,
       `رقم الملف: ${application.reference_code||'—'}`,
@@ -304,7 +313,8 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       `المبلغ الموصى به: ${recommendedAmount?formatAmount(recommendedAmount):'—'}`,
       `مدة التمويل: ${application.tenor_months||'—'} شهر`,
       `درجة المخاطر: ${riskGrade} (${riskScore}/100)`,
-      `قرار مسؤول المخاطر: ${payload.analyst_decision}`,
+      `توصية المحلل: ${payload.analyst_decision}`,
+      `التوصية الاستشارية من AI: ${advisoryRecommendation}`,
       '',
       'نقاط القوة:',
       strengths.length?strengths.map((s,i)=>`${i+1}. ${s}`).join('\n'):'لا توجد نقاط قوة مسجلة.',
@@ -326,7 +336,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
       application_id:application.id,
       risk_score:riskScore,
       risk_grade:riskGrade,
-      recommendation:payload.analyst_decision,
+      recommendation:advisoryRecommendation,
       recommended_amount:recommendedAmount,
       recommended_tenor:application.tenor_months||null,
       interest_rate:recommendedAmount?interestRateFor(recommendedAmount):null,
@@ -375,6 +385,8 @@ export default function AnalystDrawer({application,onClose,onSaved}){
     Object.values(FIVE_CS_ITEMS).forEach(c=>c.items.forEach(i=>{five_cs_details[i.key]=data[i.key]||0}))
     Object.assign(five_cs_details,{
       net_worth:n(data.net_worth),
+      g1_strength:data.g1_strength||'',
+      g2_strength:data.g2_strength||'',
       risk_flags:list(data.risk_flags),
       risk_flag_notes:data.risk_flag_notes||'',
       legal_register_valid:data.legal_register_valid,
@@ -470,7 +482,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
   }
 
   const scores=calcScores()
-  const scoreLabel=scores.total>=20?'موافقة بنفس المبلغ':scores.total>=15?'موافقة بتخفيض 25%':scores.total>=10?'تخفيض 50%':'رفض قطعاً'
+  const scoreLabel=scores.total>=20?'مخاطر منخفضة':scores.total>=15?'مخاطر متوسطة مع شروط':scores.total>=10?'مخاطر مرتفعة مع تخفيف قوي':'مخاطر عالية'
   const scoreColor=scores.total>=20?'text-emerald-400':scores.total>=15?'text-amber-400':scores.total>=10?'text-orange-400':'text-red-400'
   const avgCredit=calcAvgCredit()
 
@@ -484,7 +496,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
         <div className="flex items-center gap-3">
           <span className={`text-sm font-bold ${scoreColor}`}>الإجمالي: {scores.total.toFixed(1)} — {scoreLabel}</span>
           <button onClick={handleSave} disabled={saving} className="bg-gold-500 hover:bg-gold-600 text-navy-950 font-bold px-4 py-2 rounded-lg flex items-center gap-2 text-sm">
-            <Save size={14}/>{saving?'جاري الحفظ والتحليل...':'حفظ وتوليد التحليل'}
+            <Save size={14}/>{saving?'جاري الحفظ وتوليد توصية AI...':'حفظ وتوليد توصية AI'}
           </button>
         </div>
       </div>
@@ -654,6 +666,7 @@ export default function AnalystDrawer({application,onClose,onSaved}){
                   <Row label="السن"><Inp type="number" value={data[`g${num}_age`]} onChange={v=>set(`g${num}_age`,v)}/></Row>
                   <Row label="الصلة بالعميل"><Sel value={data[`g${num}_relation`]} onChange={v=>set(`g${num}_relation`,v)} options={RELATIONS}/></Row>
                   <Row label="الوظيفة / العباءة المالية"><Inp value={data[`g${num}_employer`]} onChange={v=>set(`g${num}_employer`,v)} placeholder="مثال: موظف ببنك مصر / مدرسة بالحكومة / عقار ملك..."/></Row>
+                  <Row label="Guarantor Strength"><Sel value={data[`g${num}_strength`]} onChange={v=>set(`g${num}_strength`,v)} options={GUARANTOR_STRENGTHS}/></Row>
                 </G2>
               </Card>
             ))}
@@ -740,12 +753,12 @@ export default function AnalystDrawer({application,onClose,onSaved}){
             })}
           </div>
 
-          {/* DECISION SECTION */}
-          <div id="section-decision">
-            <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">القرار النهائي</h2>
+          {/* ANALYST RECOMMENDATION SECTION */}
+          <div id="section-recommendation">
+            <h2 className="text-base font-bold text-navy-800 bg-navy-50 border-r-4 border-gold-500 px-4 py-3 rounded-lg mb-4">توصية المحلل</h2>
             <Card>
               <G2>
-                <Row label="القرار"><Sel value={data.analyst_decision} onChange={v=>set('analyst_decision',v)} options={DECISIONS}/></Row>
+                <Row label="توصية المحلل"><Sel value={data.analyst_decision} onChange={v=>set('analyst_decision',v)} options={RECOMMENDATIONS}/></Row>
                 <Row label="المبلغ الموصى به (جنيه)"><Inp type="number" value={data.recommended_amount||autoAmount(scores.total)} onChange={v=>set('recommended_amount',v)}/></Row>
                 <Row label="اسم مسؤول المخاطر"><Inp value={data.analyst_name} onChange={v=>set('analyst_name',v)} placeholder="الاسم بالكامل"/></Row>
               </G2>

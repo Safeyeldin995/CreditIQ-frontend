@@ -64,6 +64,7 @@ function getInterestRate(amount) {
 export default function CreditMemo({ application, onClose }) {
   const [assessment, setAssessment] = useState(null)
   const [decision, setDecision] = useState(null)
+  const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function CreditMemo({ application, onClose }) {
   }, [application.id])
 
   async function loadData() {
-    const [{ data: assessmentData }, { data: decisionData }] = await Promise.all([
+    const [{ data: assessmentData }, { data: decisionData }, { data: documentsData }] = await Promise.all([
       supabase
         .from('analyst_assessments')
         .select('*')
@@ -84,9 +85,15 @@ export default function CreditMemo({ application, onClose }) {
         .order('generated_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('documents')
+        .select('*')
+        .eq('application_id', application.id)
+        .order('uploaded_at', { ascending: false }),
     ])
     if (assessmentData) setAssessment(assessmentData)
     if (decisionData) setDecision(decisionData)
+    if (documentsData) setDocuments(documentsData)
     setLoading(false)
   }
 
@@ -114,6 +121,7 @@ export default function CreditMemo({ application, onClose }) {
   const collaterals = assessment.collaterals ? assessment.collaterals.split(',').filter(Boolean) : []
   const details = parseJson(assessment.five_cs_details, {}) || {}
   const aiMemo = parseJson(decision?.credit_memo_data, {}) || {}
+  const aiSummary = aiMemo.ai_summary || {}
   const riskFlags = [...parseList(details.risk_flags), ...parseList(aiMemo.risk_flags)]
   const legalReview = aiMemo.legal_review || {
     register_valid: details.legal_register_valid,
@@ -123,7 +131,10 @@ export default function CreditMemo({ application, onClose }) {
     litigation: details.legal_litigation,
     notes: details.legal_review_notes,
   }
-  const aiConditions = parseList(aiMemo.conditions || aiMemo.fulfillments)
+  const aiRisks = parseList(aiSummary.risks || decision?.threats)
+  const aiConditions = parseList(aiSummary.conditions || aiMemo.conditions || aiMemo.fulfillments)
+  const aiConfidence = aiSummary.confidence_score || decision?.confidence_score
+  const finalDecision = aiMemo.final_decision || {}
   const today = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
@@ -245,6 +256,27 @@ export default function CreditMemo({ application, onClose }) {
             </div>
           )}
 
+          {/* Attachments metadata */}
+          <div className="mb-6">
+            <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">المرفقات</h3>
+            {documents.length > 0 ? (
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <tbody>
+                  {documents.map((doc, i) => (
+                    <tr key={doc.id || i} className="border border-gray-300">
+                      <td className="font-bold bg-gray-50 px-4 py-2 w-12 border-l border-gray-300">{i + 1}</td>
+                      <td className="px-4 py-2">{doc.file_path ? (doc.file_path.split('/').pop() || '').replace(/^\d+_/, '').replace(/_/g, ' ') : 'مرفق'}</td>
+                      <td className="px-4 py-2">{doc.document_type || 'other'}</td>
+                      <td className="px-4 py-2">{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString('ar-EG') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-gray-500">لا توجد مرفقات مسجلة.</p>
+            )}
+          </div>
+
           {/* Notes */}
           {assessment.analyst_notes && (
             <div className="mb-6 bg-gray-50 rounded p-3 text-sm">
@@ -301,19 +333,22 @@ export default function CreditMemo({ application, onClose }) {
           <div className="mb-6">
             <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">ملخص توصية AI الاستشارية</h3>
             <p className="text-xs text-gray-500 mb-3">توصية AI استشارية فقط ولا تمثل قرار اعتماد أو رفض.</p>
+            {aiSummary.summary && (
+              <p className="text-sm whitespace-pre-wrap mb-3"><span className="font-bold">الملخص: </span>{aiSummary.summary}</p>
+            )}
             <div className="grid grid-cols-2 gap-3 text-sm mb-3">
               <div className="bg-gray-50 rounded p-3">
                 <p className="font-bold mb-1">التوصية الاستشارية</p>
-                <p>{decision?.recommendation || '—'}</p>
+                <p>{aiSummary.advisory_recommendation || decision?.recommendation || '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-3">
                 <p className="font-bold mb-1">درجة الثقة</p>
-                <p>{decision?.confidence_score ? Math.round(Number(decision.confidence_score) <= 1 ? Number(decision.confidence_score) * 100 : Number(decision.confidence_score)) + '%' : 'غير متاح'}</p>
+                <p>{aiConfidence ? Math.round(Number(aiConfidence) <= 1 ? Number(aiConfidence) * 100 : Number(aiConfidence)) + '%' : 'غير متاح'}</p>
               </div>
             </div>
-            {decision?.strengths && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{decision.strengths}</p>}
-            {decision?.weaknesses && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{decision.weaknesses}</p>}
-            {decision?.threats && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">المخاطر: </span>{decision.threats}</p>}
+            {(aiSummary.strengths || decision?.strengths) && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{Array.isArray(aiSummary.strengths) ? aiSummary.strengths.join('\n') : (aiSummary.strengths || decision.strengths)}</p>}
+            {(aiSummary.weaknesses || decision?.weaknesses) && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{Array.isArray(aiSummary.weaknesses) ? aiSummary.weaknesses.join('\n') : (aiSummary.weaknesses || decision.weaknesses)}</p>}
+            {aiRisks.length > 0 && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">المخاطر: </span>{aiRisks.join('\n')}</p>}
             {aiConditions.length > 0 && (
               <div className="text-sm">
                 <p className="font-bold mb-1">الشروط المقترحة:</p>
@@ -329,6 +364,12 @@ export default function CreditMemo({ application, onClose }) {
             <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">القرار النهائي</h3>
             <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
               <p><span className="font-bold">القرار البشري النهائي: </span>{FINAL_STATUS_LABELS[decision?.status] || 'بانتظار القرار النهائي'}</p>
+              <p className="mt-2"><span className="font-bold">المبلغ المعتمد: </span>{finalDecision.approved_amount ? formatAmount(finalDecision.approved_amount) : '—'}</p>
+              <p className="mt-2"><span className="font-bold">المدة المعتمدة: </span>{finalDecision.approved_tenor ? `${finalDecision.approved_tenor} شهر` : '—'}</p>
+              <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">الضمانات النهائية: </span>{finalDecision.final_guarantees || '—'}</p>
+              <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">الشروط النهائية: </span>{finalDecision.final_conditions || '—'}</p>
+              <p className="mt-2"><span className="font-bold">صاحب القرار: </span>{finalDecision.decision_maker || '—'}</p>
+              <p className="mt-2"><span className="font-bold">تاريخ القرار: </span>{finalDecision.decision_date || '—'}</p>
               {decision?.team_head_notes && (
                 <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">ملاحظات القرار: </span>{decision.team_head_notes}</p>
               )}

@@ -5,38 +5,25 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-export const N8N_WEBHOOK = 'https://primary-production-82778.up.railway.app/webhook/creditiq-upload'
 export const N8N_ANALYZE_WEBHOOK = 'https://primary-production-82778.up.railway.app/webhook/creditiq-analyze'
 
-export function detectDocType(filename) {
-  const f = filename.toLowerCase()
-  if (f.includes('iscore') || f.includes('ايسكور') || f.includes('ايسكر') || f.includes('i-score') || f.includes('score') || f.includes('سكور')) return 'iscore_client'
-  if (f.includes('bank') || f.includes('بنك') || f.includes('حساب') || f.includes('statement') || f.includes('كشف') || f.includes('رصيد') || f.includes('بنكي')) return 'bank_statement_business'
-  if (f.includes('field') || f.includes('استعلام') || f.includes('ميداني') || f.includes('زيارة') || f.includes('معاينة')) return 'field_investigation'
-  if (f.includes('credit') || f.includes('ائتمانية') || f.includes('دراسة') || f.includes('ائتمان')) return 'credit_study'
-  if (f.includes('register') || f.includes('سجل') || f.includes('تجاري')) return 'commercial_register'
-  if (f.includes('tax') || f.includes('ضريب') || f.includes('ضرائب')) return 'tax_card'
-  if (f.includes('invoice') || f.includes('فاتور') || f.includes('فواتير') || f.includes('مبيعات')) return 'invoices'
-  if (f.includes('financial') || f.includes('مالية') || f.includes('قوائم') || f.includes('ميزانية') || f.includes('ارباح') || f.includes('خسائر')) return 'financial_statements'
-  if (f.includes('protest') || f.includes('بروتستو')) return 'protest_certificate'
-  if (f.includes('bankrupt') || f.includes('افلاس') || f.includes('إفلاس')) return 'bankruptcy_declaration'
-  if (f.includes('pledge') || f.includes('رهن') || f.includes('حيازي')) return 'possessory_pledge'
-  return 'other'
-}
-
 export const DOC_TYPE_LABELS = {
-  iscore_client: { ar: 'الايسكور — العميل', en: 'I-Score Client' },
-  bank_statement_business: { ar: 'كشف الحساب البنكي للنشاط', en: 'Business Bank Statement' },
-  field_investigation: { ar: 'تقرير الاستعلام الميداني', en: 'Field Investigation' },
-  credit_study: { ar: 'الدراسة الائتمانية', en: 'Credit Study' },
+  national_id: { ar: 'بطاقة الرقم القومي', en: 'National ID' },
+  iscore_client: { ar: 'تقرير الايسكور', en: 'I-Score Report' },
+  bank_statement_business: { ar: 'كشف الحساب البنكي', en: 'Bank Statement' },
+  field_investigation: { ar: 'تقرير الزيارة الميدانية', en: 'Site Visit Report' },
+  credit_study: { ar: 'ملف الدراسة', en: 'Assessment File' },
   commercial_register: { ar: 'السجل التجاري', en: 'Commercial Register' },
   tax_card: { ar: 'البطاقة الضريبية', en: 'Tax Card' },
-  invoices: { ar: 'الفواتير وما يفيد المبيعات', en: 'Invoices & Sales' },
-  financial_statements: { ar: 'القوائم المالية', en: 'Financial Statements' },
+  guarantor_documents: { ar: 'مستندات الضامنين', en: 'Guarantor Documents' },
+  invoices: { ar: 'فواتير ومستندات مبيعات', en: 'Invoices & Sales Documents' },
+  financial_statements: { ar: 'مستندات مالية', en: 'Financial Documents' },
+  ownership_documents: { ar: 'مستندات ملكية', en: 'Ownership Documents' },
+  collateral_documents: { ar: 'مستندات ضمان', en: 'Collateral Documents' },
   protest_certificate: { ar: 'شهادة بروتستو', en: 'Protest Certificate' },
   bankruptcy_declaration: { ar: 'بيان عدم الإفلاس', en: 'Bankruptcy Declaration' },
   possessory_pledge: { ar: 'عقد الرهن الحيازي', en: 'Possessory Pledge' },
-  other: { ar: 'مستند آخر', en: 'Other Document' },
+  other: { ar: 'مرفق آخر', en: 'Other Attachment' },
 }
 
 export const STATUS_LABELS = {
