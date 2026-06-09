@@ -51,7 +51,8 @@ function ListBlock({ title, items, tone = 'navy', icon: Icon = CheckCircle }) {
 }
 
 function confidenceValue(decision, creditMemo) {
-  const raw = decision.confidence_score ?? decision.confidence ?? creditMemo.confidence_score ?? creditMemo.confidence
+  const summary = creditMemo.ai_summary || {}
+  const raw = summary.confidence_score ?? decision.confidence_score ?? decision.confidence ?? creditMemo.confidence_score ?? creditMemo.confidence
   if (raw === null || raw === undefined || raw === '') return 'غير متاح'
   const num = Number(raw)
   if (Number.isNaN(num)) return raw
@@ -97,8 +98,7 @@ export default function AnalysisTab({ application }) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <FileX size={48} className="text-gray-200 mb-4" />
-        <p className="text-gray-400 font-medium">لم يتم توليد توصية AI بعد</p>
-        <p className="text-gray-300 text-sm mt-1">أكمل التقييم واضغط حفظ وتوليد التحليل</p>
+        <p className="text-gray-400 font-medium">AI Recommendation Not Generated Yet</p>
         <button onClick={fetchDecision} className="btn-ghost mt-4 flex items-center gap-2">
           <RefreshCw size={14} />تحديث
         </button>
@@ -107,12 +107,13 @@ export default function AnalysisTab({ application }) {
   }
 
   const creditMemo = parseJson(decision.credit_memo_data, {}) || {}
-  const risks = [
-    ...parseList(decision.threats),
-    ...parseList(decision.fraud_flags),
-    ...parseList(creditMemo.risk_flags),
-  ].filter(Boolean)
-  const conditions = parseList(creditMemo.conditions || creditMemo.fulfillments || decision.conditions)
+  const aiSummary = creditMemo.ai_summary || {}
+  const summary = aiSummary.summary || decision.summary || '—'
+  const strengths = aiSummary.strengths || decision.strengths
+  const weaknesses = aiSummary.weaknesses || decision.weaknesses
+  const risks = parseList(aiSummary.risks || decision.threats)
+  const conditions = parseList(aiSummary.conditions || creditMemo.conditions || decision.conditions)
+  const advisoryRecommendation = aiSummary.advisory_recommendation || decision.recommendation || '—'
 
   return (
     <div className="flex flex-col gap-5">
@@ -129,30 +130,28 @@ export default function AnalysisTab({ application }) {
       </div>
 
       <div className="card p-5">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-gray-400 mb-1">التوصية الاستشارية</p>
-            <p className="font-bold text-navy-900">{decision.recommendation || '—'}</p>
+            <p className="font-bold text-navy-900">{advisoryRecommendation}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">درجة الثقة</p>
             <p className="font-bold text-navy-900">{confidenceValue(decision, creditMemo)}</p>
           </div>
-          <div>
-            <p className="text-xs text-gray-400 mb-1">تاريخ التوليد</p>
-            <p className="font-bold text-navy-900">
-              {decision.generated_at ? new Date(decision.generated_at).toLocaleString('ar-EG') : '—'}
-            </p>
-          </div>
         </div>
       </div>
 
+      <TextBlock title="الملخص" tone="navy">
+        {summary}
+      </TextBlock>
+
       <TextBlock title="نقاط القوة" tone="emerald">
-        {decision.strengths}
+        {Array.isArray(strengths) ? strengths.join('\n') : strengths}
       </TextBlock>
 
       <TextBlock title="نقاط الضعف" tone="amber" icon={AlertTriangle}>
-        {decision.weaknesses}
+        {Array.isArray(weaknesses) ? weaknesses.join('\n') : weaknesses}
       </TextBlock>
 
       <ListBlock title="المخاطر" items={risks} tone="red" icon={AlertTriangle} />

@@ -7,21 +7,21 @@ import AnalysisTab from './AnalysisTab'
 import MemoTab from './MemoTab'
 import AnalystDrawer from './AnalystDrawer'
 import CreditMemo from './CreditMemo'
-import { ArrowRight, ClipboardList, FileText } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
 const TABS = [
-  { key: 'documents', ar: 'المستندات', en: 'Documents' },
-  { key: 'analysis', ar: 'التحليل والنتائج', en: 'Analysis' },
-  { key: 'memo', ar: 'جواب المخاطر', en: 'Risk Memo' },
+  { key: 'assessment', ar: 'التقييم', en: 'Assessment' },
+  { key: 'attachments', ar: 'المرفقات', en: 'Attachments' },
+  { key: 'ai', ar: 'توصية AI', en: 'AI Recommendation' },
+  { key: 'creditMemo', ar: 'مذكرة الائتمان', en: 'Credit Memo' },
+  { key: 'finalDecision', ar: 'القرار النهائي', en: 'Final Decision' },
 ]
 
 export default function ApplicationDetail({ lang, onToggleLang, user }) {
   const { id } = useParams()
   const [application, setApplication] = useState(null)
-  const [activeTab, setActiveTab] = useState('documents')
+  const [activeTab, setActiveTab] = useState('assessment')
   const [loading, setLoading] = useState(true)
-  const [showDrawer, setShowDrawer] = useState(false)
-  const [showMemo, setShowMemo] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -105,22 +105,6 @@ export default function ApplicationDetail({ lang, onToggleLang, user }) {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 mt-3 border-t border-gray-50 pt-3">
-          <button
-            onClick={() => setShowDrawer(true)}
-            className="btn-primary flex items-center gap-2 text-sm py-2"
-          >
-            <ClipboardList size={15} />
-            {lang === 'ar' ? 'تقييم الملف' : 'Analyst Form'}
-          </button>
-          <button
-            onClick={() => setShowMemo(true)}
-            className="btn-ghost flex items-center gap-2 text-sm py-2"
-          >
-            <FileText size={15} />
-            {lang === 'ar' ? 'جواب الموافقة' : 'Credit Memo'}
-          </button>
-        </div>
       </div>
 
       {/* Tabs */}
@@ -137,34 +121,29 @@ export default function ApplicationDetail({ lang, onToggleLang, user }) {
           ))}
         </div>
         <div className="p-6">
-          {activeTab === 'documents' && (
+          {activeTab === 'assessment' && (
+            <AnalystDrawer
+              application={application}
+              lang={lang}
+              onSaved={fetchApplication}
+              embedded
+            />
+          )}
+          {activeTab === 'attachments' && (
             <DocumentsTab application={application} lang={lang} />
           )}
-          {activeTab === 'analysis' && (
+          {activeTab === 'ai' && (
             <AnalysisTab application={application} lang={lang} />
           )}
-          {activeTab === 'memo' && (
+          {activeTab === 'creditMemo' && (
+            <CreditMemo application={application} embedded />
+          )}
+          {activeTab === 'finalDecision' && (
             <MemoTab application={application} lang={lang} onStatusChange={fetchApplication} />
           )}
         </div>
       </div>
     </Layout>
-
-      {showDrawer && application && (
-        <AnalystDrawer
-          application={application}
-          lang={lang}
-          onClose={() => setShowDrawer(false)}
-          onSaved={fetchApplication}
-        />
-      )}
-
-      {showMemo && application && (
-        <CreditMemo
-          application={application}
-          onClose={() => setShowMemo(false)}
-        />
-      )}
     </>
   )
 }

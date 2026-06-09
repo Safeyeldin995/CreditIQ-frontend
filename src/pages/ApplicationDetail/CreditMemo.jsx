@@ -21,6 +21,39 @@ function parseList(value) {
   return []
 }
 
+function display(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  if (typeof value === 'boolean') return value ? 'نعم' : 'لا'
+  return value
+}
+
+function amount(value) {
+  return value || value === 0 ? formatAmount(value) : '—'
+}
+
+function lines(items) {
+  const filtered = items.filter(Boolean)
+  return filtered.length > 0 ? filtered.join('\n') : '—'
+}
+
+function InfoTable({ title, rows }) {
+  return (
+    <div className="mb-6">
+      <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">{title}</h3>
+      <table className="w-full border-collapse border border-gray-300 text-sm">
+        <tbody>
+          {rows.map(([label, value]) => (
+            <tr key={label} className="border border-gray-300">
+              <td className="font-bold bg-gray-50 px-4 py-2 w-56 border-l border-gray-300">{label}</td>
+              <td className="px-4 py-2 whitespace-pre-wrap">{display(value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 const FINAL_STATUS_LABELS = {
   approved: 'اعتماد',
   approved_with_conditions: 'اعتماد بشروط',
@@ -61,9 +94,10 @@ function getInterestRate(amount) {
   return 20
 }
 
-export default function CreditMemo({ application, onClose }) {
+export default function CreditMemo({ application, onClose, embedded=false }) {
   const [assessment, setAssessment] = useState(null)
   const [decision, setDecision] = useState(null)
+  const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -71,7 +105,7 @@ export default function CreditMemo({ application, onClose }) {
   }, [application.id])
 
   async function loadData() {
-    const [{ data: assessmentData }, { data: decisionData }] = await Promise.all([
+    const [{ data: assessmentData }, { data: decisionData }, { data: documentsData }] = await Promise.all([
       supabase
         .from('analyst_assessments')
         .select('*')
@@ -84,15 +118,21 @@ export default function CreditMemo({ application, onClose }) {
         .order('generated_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('documents')
+        .select('*')
+        .eq('application_id', application.id)
+        .order('uploaded_at', { ascending: false }),
     ])
     if (assessmentData) setAssessment(assessmentData)
     if (decisionData) setDecision(decisionData)
+    if (documentsData) setDocuments(documentsData)
     setLoading(false)
   }
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+      <div className={embedded ? 'bg-white flex items-center justify-center py-16' : 'fixed inset-0 z-50 bg-white flex items-center justify-center'}>
         <p className="text-gray-400">جاري تحميل البيانات...</p>
       </div>
     )
@@ -100,9 +140,9 @@ export default function CreditMemo({ application, onClose }) {
 
   if (!assessment) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center">
+      <div className={embedded ? 'bg-white flex flex-col items-center justify-center py-16' : 'fixed inset-0 z-50 bg-white flex flex-col items-center justify-center'}>
         <p className="text-gray-500 mb-4">لم يتم إتمام تقييم الملف بعد</p>
-        <button onClick={onClose} className="btn-ghost">إغلاق</button>
+        {!embedded && <button onClick={onClose} className="btn-ghost">إغلاق</button>}
       </div>
     )
   }
@@ -113,7 +153,9 @@ export default function CreditMemo({ application, onClose }) {
   const fulfillments = assessment.fulfillments ? assessment.fulfillments.split('||').filter(Boolean) : []
   const collaterals = assessment.collaterals ? assessment.collaterals.split(',').filter(Boolean) : []
   const details = parseJson(assessment.five_cs_details, {}) || {}
+  const bankData = parseJson(assessment.bank_statement_data, {}) || {}
   const aiMemo = parseJson(decision?.credit_memo_data, {}) || {}
+  const aiSummary = aiMemo.ai_summary || {}
   const riskFlags = [...parseList(details.risk_flags), ...parseList(aiMemo.risk_flags)]
   const legalReview = aiMemo.legal_review || {
     register_valid: details.legal_register_valid,
@@ -123,11 +165,29 @@ export default function CreditMemo({ application, onClose }) {
     litigation: details.legal_litigation,
     notes: details.legal_review_notes,
   }
-  const aiConditions = parseList(aiMemo.conditions || aiMemo.fulfillments)
+  const aiRisks = parseList(aiSummary.risks || decision?.threats)
+  const aiConditions = parseList(aiSummary.conditions || aiMemo.conditions || aiMemo.fulfillments)
+  const aiConfidence = aiSummary.confidence_score || decision?.confidence_score
+  const finalDecision = aiMemo.final_decision || {}
   const today = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+  const monthlyCredits = Array.isArray(bankData.monthly_details)
+    ? bankData.monthly_details
+      .filter(m => m.month || m.credit)
+      .map(m => `${m.month || 'شهر غير محدد'}: ${amount(m.credit)}`)
+    : []
+  const salesEstimates = lines([
+    assessment.sales_specialist ? `تقدير الاخصائي: ${amount(assessment.sales_specialist)}` : null,
+    assessment.sales_investigator ? `تقدير المستعلم: ${amount(assessment.sales_investigator)}` : null,
+    assessment.sales_manager ? `تقدير مدير المشروعات: ${amount(assessment.sales_manager)}` : null,
+  ])
+  const capitalEstimates = lines([
+    assessment.capital_specialist ? `تقدير الاخصائي: ${amount(assessment.capital_specialist)}` : null,
+    assessment.capital_investigator ? `تقدير المستعلم: ${amount(assessment.capital_investigator)}` : null,
+    assessment.capital_manager ? `تقدير مدير المشروعات: ${amount(assessment.capital_manager)}` : null,
+  ])
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-100 overflow-auto" dir="rtl">
+    <div className={embedded ? 'bg-gray-100 overflow-auto rounded-xl' : 'fixed inset-0 z-50 bg-gray-100 overflow-auto'} dir="rtl">
       {/* Toolbar - hidden on print */}
       <div className="no-print sticky top-0 bg-navy-900 text-white px-6 py-3 flex items-center justify-between z-10">
         <h2 className="font-bold">جواب الموافقة — {application.client_name_ar}</h2>
@@ -136,9 +196,9 @@ export default function CreditMemo({ application, onClose }) {
             <Printer size={14} />
             طباعة
           </button>
-          <button onClick={onClose} className="text-navy-300 hover:text-white">
+          {!embedded && <button onClick={onClose} className="text-navy-300 hover:text-white">
             <X size={20} />
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -176,22 +236,102 @@ export default function CreditMemo({ application, onClose }) {
             </tbody>
           </table>
 
+          <InfoTable
+            title="بيانات العميل والايسكور"
+            rows={[
+              ['سن العميل', assessment.client_age],
+              ['التصنيف الائتماني', assessment.ai_iscore_grade],
+              ['الدرجة الرقمية للايسكور', assessment.ai_iscore_score],
+              ['إجمالي الالتزامات القائمة', amount(assessment.ai_outstanding_loans)],
+              ['شيكات مرتجعة / تعثر', assessment.ai_returned_cheques],
+              ['ملاحظات التاريخ الائتماني', assessment.ai_iscore_notes],
+            ]}
+          />
+
+          <InfoTable
+            title="القدرة المالية"
+            rows={[
+              ['المبيعات الشهرية', amount(assessment.ai_monthly_sales)],
+              ['المشتريات الشهرية', amount(assessment.ai_monthly_purchases)],
+              ['صافي الثروة', amount(details.net_worth)],
+              ['العباءات / الأصول المالية', assessment.client_financial_assets],
+              ['هامش الربح الإجمالي', details.gross_margin || details.gross_margin === 0 ? `${details.gross_margin}%` : '—'],
+              ['صافي الدخل الشهري', amount(details.net_income)],
+            ]}
+          />
+
+          <InfoTable
+            title="تحليل كشف الحساب البنكي"
+            rows={[
+              ['متوسط الرصيد', amount(bankData.avg_balance)],
+              ['التدفقات الدائنة الشهرية', monthlyCredits.length > 0 ? monthlyCredits.join('\n') : '—'],
+              ['شيكات مرتدة', bankData.has_returned_checks],
+              ['تفاصيل الشيكات المرتدة', bankData.returned_checks_details],
+              ['غرامات / تأخيرات', bankData.has_late_fees],
+              ['تفاصيل التأخيرات', bankData.late_fees_details],
+              ['تمويلات ظاهرة على الكشف', bankData.has_loans_on_statement],
+              ['تفاصيل التمويلات', bankData.loans_details],
+              ['تحويلات أطراف ذات علاقة', bankData.self_transfers],
+            ]}
+          />
+
+          <InfoTable
+            title="الزيارة الميدانية"
+            rows={[
+              ['انتظام التشغيل', assessment.operation_rating],
+              ['عدد العمالة', assessment.employee_count],
+              ['ملكية محل النشاط', assessment.business_ownership],
+              ['ملكية السكن', assessment.residence_ownership],
+              ['تقديرات المبيعات', salesEstimates],
+              ['تقديرات رأس المال', capitalEstimates],
+            ]}
+          />
+
+          <InfoTable
+            title="المكالمات التليفونية"
+            rows={[
+              ['نتيجة مكالمة العميل', assessment.client_called ? assessment.client_call_result : 'لم يتم الاتصال'],
+              ['ملاحظات مكالمة العميل', assessment.client_call_notes],
+              ['نتيجة مكالمة الضامن الأول', assessment.g1_called ? assessment.g1_call_result : 'لم يتم الاتصال'],
+              ['ملاحظات مكالمة الضامن الأول', assessment.g1_call_notes],
+              ['نتيجة مكالمة الضامن الثاني', assessment.g2_called ? assessment.g2_call_result : 'لم يتم الاتصال'],
+              ['ملاحظات مكالمة الضامن الثاني', assessment.g2_call_notes],
+              ['نتيجة مكالمات الموردين', assessment.suppliers_called ? 'تم الاتصال' : 'لم يتم الاتصال'],
+              ['ملاحظات الموردين', assessment.suppliers_notes],
+            ]}
+          />
+
+          <InfoTable
+            title="تقييم الجدارة الائتمانية 5Cs"
+            rows={[
+              ['Character', `${assessment.score_character || 0} / 5`],
+              ['Capacity', `${assessment.score_credit_history || 0} / 5`],
+              ['Capital', `${assessment.score_capital || 0} / 5`],
+              ['Collateral', `${assessment.score_collateral || 0} / 4.5`],
+              ['Conditions', `${assessment.score_conditions || 0} / 5`],
+              ['إجمالي الدرجات', `${assessment.total_score || 0} / 24.5`],
+            ]}
+          />
+
           {/* Guarantors */}
           {[1, 2].map(n => {
             const name = assessment[`g${n}_name`]
             if (!name) return null
             return (
-              <table key={n} className="w-full border-collapse border border-gray-300 mb-4 text-sm">
-                <tbody>
-                  <tr className="border border-gray-300">
-                    <td className="font-bold bg-gray-50 px-4 py-2 w-48 border-l border-gray-300">بيانات ض{n}</td>
-                    <td className="px-4 py-2">
-                      {name} — السن {assessment[`g${n}_age`]} سنة —{' '}
-                      {assessment[`g${n}_job`]} — {assessment[`g${n}_relation`]} — {assessment[`g${n}_residence`]}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <InfoTable
+                key={n}
+                title={`بيانات الضامن ${n}`}
+                rows={[
+                  ['الاسم', name],
+                  ['السن', assessment[`g${n}_age`]],
+                  ['الصلة بالعميل', assessment[`g${n}_relation`]],
+                  ['الوظيفة / العباءة المالية', assessment[`g${n}_employer`]],
+                  ['Strength', details[`g${n}_strength`]],
+                  ['رقم الهاتف', details[`g${n}_phone`]],
+                  ['الدخل / الأصول', details[`g${n}_income_assets`]],
+                  ['ملاحظات', details[`g${n}_notes`]],
+                ]}
+              />
             )
           })}
 
@@ -244,6 +384,27 @@ export default function CreditMemo({ application, onClose }) {
               <p className="text-sm">{collaterals.join(' — ')}</p>
             </div>
           )}
+
+          {/* Attachments metadata */}
+          <div className="mb-6">
+            <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">المرفقات</h3>
+            {documents.length > 0 ? (
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <tbody>
+                  {documents.map((doc, i) => (
+                    <tr key={doc.id || i} className="border border-gray-300">
+                      <td className="font-bold bg-gray-50 px-4 py-2 w-12 border-l border-gray-300">{i + 1}</td>
+                      <td className="px-4 py-2">{doc.file_path ? (doc.file_path.split('/').pop() || '').replace(/^\d+_/, '').replace(/_/g, ' ') : 'مرفق'}</td>
+                      <td className="px-4 py-2">{doc.document_type || 'other'}</td>
+                      <td className="px-4 py-2">{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString('ar-EG') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-gray-500">لا توجد مرفقات مسجلة.</p>
+            )}
+          </div>
 
           {/* Notes */}
           {assessment.analyst_notes && (
@@ -301,19 +462,22 @@ export default function CreditMemo({ application, onClose }) {
           <div className="mb-6">
             <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">ملخص توصية AI الاستشارية</h3>
             <p className="text-xs text-gray-500 mb-3">توصية AI استشارية فقط ولا تمثل قرار اعتماد أو رفض.</p>
+            {aiSummary.summary && (
+              <p className="text-sm whitespace-pre-wrap mb-3"><span className="font-bold">الملخص: </span>{aiSummary.summary}</p>
+            )}
             <div className="grid grid-cols-2 gap-3 text-sm mb-3">
               <div className="bg-gray-50 rounded p-3">
                 <p className="font-bold mb-1">التوصية الاستشارية</p>
-                <p>{decision?.recommendation || '—'}</p>
+                <p>{aiSummary.advisory_recommendation || decision?.recommendation || '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-3">
                 <p className="font-bold mb-1">درجة الثقة</p>
-                <p>{decision?.confidence_score ? Math.round(Number(decision.confidence_score) <= 1 ? Number(decision.confidence_score) * 100 : Number(decision.confidence_score)) + '%' : 'غير متاح'}</p>
+                <p>{aiConfidence ? Math.round(Number(aiConfidence) <= 1 ? Number(aiConfidence) * 100 : Number(aiConfidence)) + '%' : 'غير متاح'}</p>
               </div>
             </div>
-            {decision?.strengths && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{decision.strengths}</p>}
-            {decision?.weaknesses && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{decision.weaknesses}</p>}
-            {decision?.threats && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">المخاطر: </span>{decision.threats}</p>}
+            {(aiSummary.strengths || decision?.strengths) && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط القوة: </span>{Array.isArray(aiSummary.strengths) ? aiSummary.strengths.join('\n') : (aiSummary.strengths || decision.strengths)}</p>}
+            {(aiSummary.weaknesses || decision?.weaknesses) && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">نقاط الضعف: </span>{Array.isArray(aiSummary.weaknesses) ? aiSummary.weaknesses.join('\n') : (aiSummary.weaknesses || decision.weaknesses)}</p>}
+            {aiRisks.length > 0 && <p className="text-sm whitespace-pre-wrap mb-2"><span className="font-bold">المخاطر: </span>{aiRisks.join('\n')}</p>}
             {aiConditions.length > 0 && (
               <div className="text-sm">
                 <p className="font-bold mb-1">الشروط المقترحة:</p>
@@ -328,9 +492,15 @@ export default function CreditMemo({ application, onClose }) {
           <div className="mb-6">
             <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">القرار النهائي</h3>
             <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
-              <p><span className="font-bold">القرار البشري النهائي: </span>{FINAL_STATUS_LABELS[decision?.status] || 'بانتظار القرار النهائي'}</p>
-              {decision?.team_head_notes && (
-                <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">ملاحظات القرار: </span>{decision.team_head_notes}</p>
+              <p><span className="font-bold">القرار البشري النهائي: </span>{FINAL_STATUS_LABELS[finalDecision.decision] || 'بانتظار القرار النهائي'}</p>
+              <p className="mt-2"><span className="font-bold">المبلغ المعتمد: </span>{finalDecision.approved_amount ? formatAmount(finalDecision.approved_amount) : '—'}</p>
+              <p className="mt-2"><span className="font-bold">المدة المعتمدة: </span>{finalDecision.approved_tenor ? `${finalDecision.approved_tenor} شهر` : '—'}</p>
+              <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">الضمانات النهائية: </span>{finalDecision.final_guarantees || '—'}</p>
+              <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">الشروط النهائية: </span>{finalDecision.final_conditions || '—'}</p>
+              <p className="mt-2"><span className="font-bold">صاحب القرار: </span>{finalDecision.decision_maker || '—'}</p>
+              <p className="mt-2"><span className="font-bold">تاريخ القرار: </span>{finalDecision.decision_date || '—'}</p>
+              {finalDecision.decision_notes && (
+                <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">ملاحظات القرار: </span>{finalDecision.decision_notes}</p>
               )}
             </div>
           </div>
