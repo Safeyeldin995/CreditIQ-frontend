@@ -99,12 +99,12 @@ const INIT_BANK = {bank_name:'',account_type:'',period:'',avg_balance:'',has_ret
 
 const INIT = {
   client_age:'',
-  client_financial_assets:'',net_worth:'',
+  client_financial_assets:'',net_worth:'',gross_margin:'',net_income:'',
   operation_rating:'',employee_count:'',legal_status:'',business_ownership:'',residence_ownership:'',has_tools:false,has_leverage:false,
   sales_specialist:'',sales_investigator:'',sales_manager:'',sales_proof:'',purchases_proof:'',monthly_expenses:'',
   capital_specialist:'',capital_investigator:'',capital_manager:'',
-  g1_name:'',g1_age:'',g1_relation:'',g1_employer:'',g1_strength:'',
-  g2_name:'',g2_age:'',g2_relation:'',g2_employer:'',g2_strength:'',
+  g1_name:'',g1_age:'',g1_relation:'',g1_employer:'',g1_strength:'',g1_phone:'',g1_income_assets:'',g1_notes:'',
+  g2_name:'',g2_age:'',g2_relation:'',g2_employer:'',g2_strength:'',g2_phone:'',g2_income_assets:'',g2_notes:'',
   client_called:false,client_call_result:'',client_call_notes:'',
   g1_called:false,g1_call_result:'',g1_call_notes:'',
   g2_called:false,g2_call_result:'',g2_call_notes:'',
@@ -215,8 +215,16 @@ export default function AnalystDrawer({application,onClose,onSaved,embedded=fals
     Object.values(FIVE_CS_ITEMS).forEach(c=>c.items.forEach(i=>{five_cs_details[i.key]=data[i.key]||0}))
     Object.assign(five_cs_details,{
       net_worth:n(data.net_worth),
+      gross_margin:n(data.gross_margin),
+      net_income:n(data.net_income),
       g1_strength:data.g1_strength||'',
+      g1_phone:data.g1_phone||'',
+      g1_income_assets:data.g1_income_assets||'',
+      g1_notes:data.g1_notes||'',
       g2_strength:data.g2_strength||'',
+      g2_phone:data.g2_phone||'',
+      g2_income_assets:data.g2_income_assets||'',
+      g2_notes:data.g2_notes||'',
       risk_flags:list(data.risk_flags),
       risk_flag_notes:data.risk_flag_notes||'',
       legal_register_valid:data.legal_register_valid,
@@ -380,6 +388,8 @@ export default function AnalystDrawer({application,onClose,onSaved,embedded=fals
                 <Row label="المبيعات الشهرية المثبتة (جنيه)"><Inp type="number" value={data.ai_monthly_sales} onChange={v=>set('ai_monthly_sales',v)}/></Row>
                 <Row label="المشتريات الشهرية (جنيه)"><Inp type="number" value={data.ai_monthly_purchases} onChange={v=>set('ai_monthly_purchases',v)}/></Row>
                 <Row label="صافي الثروة (جنيه)"><Inp type="number" value={data.net_worth} onChange={v=>set('net_worth',v)} placeholder="إجمالي الأصول ناقص الالتزامات"/></Row>
+                <Row label="هامش الربح الإجمالي (%)"><Inp type="number" value={data.gross_margin} onChange={v=>set('gross_margin',v)}/></Row>
+                <Row label="صافي الدخل الشهري (جنيه)"><Inp type="number" value={data.net_income} onChange={v=>set('net_income',v)}/></Row>
               </G2>
             </Card>
           </div>
@@ -492,7 +502,12 @@ export default function AnalystDrawer({application,onClose,onSaved,embedded=fals
                   <Row label="الصلة بالعميل"><Sel value={data[`g${num}_relation`]} onChange={v=>set(`g${num}_relation`,v)} options={RELATIONS}/></Row>
                   <Row label="الوظيفة / العباءة المالية"><Inp value={data[`g${num}_employer`]} onChange={v=>set(`g${num}_employer`,v)} placeholder="مثال: موظف ببنك مصر / مدرسة بالحكومة / عقار ملك..."/></Row>
                   <Row label="Guarantor Strength"><Sel value={data[`g${num}_strength`]} onChange={v=>set(`g${num}_strength`,v)} options={GUARANTOR_STRENGTHS}/></Row>
+                  <Row label="رقم الهاتف"><Inp value={data[`g${num}_phone`]} onChange={v=>set(`g${num}_phone`,v)}/></Row>
+                  <Row label="الدخل / الأصول"><Inp value={data[`g${num}_income_assets`]} onChange={v=>set(`g${num}_income_assets`,v)} placeholder="دخل شهري، عقار، سيارة، وظيفة ثابتة..."/></Row>
                 </G2>
+                <div className="mt-3">
+                  <Row label="ملاحظات الضامن"><TA value={data[`g${num}_notes`]} onChange={v=>set(`g${num}_notes`,v)} rows={3}/></Row>
+                </div>
               </Card>
             ))}
           </div>
