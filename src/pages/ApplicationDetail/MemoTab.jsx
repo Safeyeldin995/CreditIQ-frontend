@@ -58,7 +58,7 @@ export default function MemoTab({ application, lang, onStatusChange }) {
       setDecision(data)
       const memoData = parseJson(data.credit_memo_data, {}) || {}
       const savedFinal = memoData.final_decision || {}
-      setNotes(data.team_head_notes || savedFinal.decision_notes || '')
+      setNotes(savedFinal.decision_notes || '')
       setFinalDecision({
         approved_amount: savedFinal.approved_amount || '',
         approved_tenor: savedFinal.approved_tenor || '',
@@ -103,7 +103,7 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     }
     const [applicationResult, decisionResult] = await Promise.all([
       supabase.from('applications').update({ status: confirmDecision.appStatus }).eq('id', application.id),
-      supabase.from('risk_decision').update({ status: confirmDecision.key, team_head_notes: notes, credit_memo_data: nextMemoData }).eq('id', decision.id),
+      supabase.from('risk_decision').update({ credit_memo_data: nextMemoData }).eq('id', decision.id),
     ])
     if (applicationResult.error || decisionResult.error) {
       toast(lang === 'ar' ? 'تعذر حفظ القرار النهائي' : 'Unable to save final decision', 'error')
@@ -138,7 +138,9 @@ export default function MemoTab({ application, lang, onStatusChange }) {
     )
   }
 
-  const isFinal = ['approved', 'approved_with_conditions', 'rejected'].includes(decision.status)
+  const memoData = parseJson(decision.credit_memo_data, {}) || {}
+  const savedFinalDecision = memoData.final_decision || {}
+  const isFinal = ['approved', 'approved_with_conditions', 'rejected'].includes(savedFinalDecision.decision)
 
   return (
     <div className="flex flex-col gap-6">
@@ -251,16 +253,16 @@ export default function MemoTab({ application, lang, onStatusChange }) {
             })}
           </div>
         ) : (
-          <div className={`rounded-xl p-4 flex items-start gap-3 ${decision.status === 'rejected' ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-            {decision.status === 'rejected'
+          <div className={`rounded-xl p-4 flex items-start gap-3 ${savedFinalDecision.decision === 'rejected' ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+            {savedFinalDecision.decision === 'rejected'
               ? <XCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
               : <CheckCircle size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
             }
             <div>
-              <p className={`font-bold ${decision.status === 'rejected' ? 'text-red-700' : 'text-emerald-700'}`}>
-                {STATUS_LABELS[decision.status] || decision.status}
+              <p className={`font-bold ${savedFinalDecision.decision === 'rejected' ? 'text-red-700' : 'text-emerald-700'}`}>
+                {STATUS_LABELS[savedFinalDecision.decision] || savedFinalDecision.decision}
               </p>
-              {decision.team_head_notes && <p className="text-sm text-gray-600 mt-1">{decision.team_head_notes}</p>}
+              {savedFinalDecision.decision_notes && <p className="text-sm text-gray-600 mt-1">{savedFinalDecision.decision_notes}</p>}
             </div>
           </div>
         )}

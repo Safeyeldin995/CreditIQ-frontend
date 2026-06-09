@@ -98,8 +98,7 @@ export default function AnalysisTab({ application }) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <FileX size={48} className="text-gray-200 mb-4" />
-        <p className="text-gray-400 font-medium">لم يتم توليد توصية AI بعد</p>
-        <p className="text-gray-300 text-sm mt-1">أكمل التقييم واضغط حفظ وتوليد التحليل</p>
+        <p className="text-gray-400 font-medium">AI Recommendation Not Generated Yet</p>
         <button onClick={fetchDecision} className="btn-ghost mt-4 flex items-center gap-2">
           <RefreshCw size={14} />تحديث
         </button>

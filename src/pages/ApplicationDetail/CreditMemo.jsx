@@ -61,7 +61,7 @@ function getInterestRate(amount) {
   return 20
 }
 
-export default function CreditMemo({ application, onClose }) {
+export default function CreditMemo({ application, onClose, embedded=false }) {
   const [assessment, setAssessment] = useState(null)
   const [decision, setDecision] = useState(null)
   const [documents, setDocuments] = useState([])
@@ -99,7 +99,7 @@ export default function CreditMemo({ application, onClose }) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+      <div className={embedded ? 'bg-white flex items-center justify-center py-16' : 'fixed inset-0 z-50 bg-white flex items-center justify-center'}>
         <p className="text-gray-400">جاري تحميل البيانات...</p>
       </div>
     )
@@ -107,9 +107,9 @@ export default function CreditMemo({ application, onClose }) {
 
   if (!assessment) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center">
+      <div className={embedded ? 'bg-white flex flex-col items-center justify-center py-16' : 'fixed inset-0 z-50 bg-white flex flex-col items-center justify-center'}>
         <p className="text-gray-500 mb-4">لم يتم إتمام تقييم الملف بعد</p>
-        <button onClick={onClose} className="btn-ghost">إغلاق</button>
+        {!embedded && <button onClick={onClose} className="btn-ghost">إغلاق</button>}
       </div>
     )
   }
@@ -138,7 +138,7 @@ export default function CreditMemo({ application, onClose }) {
   const today = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-100 overflow-auto" dir="rtl">
+    <div className={embedded ? 'bg-gray-100 overflow-auto rounded-xl' : 'fixed inset-0 z-50 bg-gray-100 overflow-auto'} dir="rtl">
       {/* Toolbar - hidden on print */}
       <div className="no-print sticky top-0 bg-navy-900 text-white px-6 py-3 flex items-center justify-between z-10">
         <h2 className="font-bold">جواب الموافقة — {application.client_name_ar}</h2>
@@ -147,9 +147,9 @@ export default function CreditMemo({ application, onClose }) {
             <Printer size={14} />
             طباعة
           </button>
-          <button onClick={onClose} className="text-navy-300 hover:text-white">
+          {!embedded && <button onClick={onClose} className="text-navy-300 hover:text-white">
             <X size={20} />
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -363,15 +363,15 @@ export default function CreditMemo({ application, onClose }) {
           <div className="mb-6">
             <h3 className="font-bold text-navy-800 mb-3 text-sm border-b pb-1">القرار النهائي</h3>
             <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
-              <p><span className="font-bold">القرار البشري النهائي: </span>{FINAL_STATUS_LABELS[decision?.status] || 'بانتظار القرار النهائي'}</p>
+              <p><span className="font-bold">القرار البشري النهائي: </span>{FINAL_STATUS_LABELS[finalDecision.decision] || 'بانتظار القرار النهائي'}</p>
               <p className="mt-2"><span className="font-bold">المبلغ المعتمد: </span>{finalDecision.approved_amount ? formatAmount(finalDecision.approved_amount) : '—'}</p>
               <p className="mt-2"><span className="font-bold">المدة المعتمدة: </span>{finalDecision.approved_tenor ? `${finalDecision.approved_tenor} شهر` : '—'}</p>
               <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">الضمانات النهائية: </span>{finalDecision.final_guarantees || '—'}</p>
               <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">الشروط النهائية: </span>{finalDecision.final_conditions || '—'}</p>
               <p className="mt-2"><span className="font-bold">صاحب القرار: </span>{finalDecision.decision_maker || '—'}</p>
               <p className="mt-2"><span className="font-bold">تاريخ القرار: </span>{finalDecision.decision_date || '—'}</p>
-              {decision?.team_head_notes && (
-                <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">ملاحظات القرار: </span>{decision.team_head_notes}</p>
+              {finalDecision.decision_notes && (
+                <p className="mt-2 whitespace-pre-wrap"><span className="font-bold">ملاحظات القرار: </span>{finalDecision.decision_notes}</p>
               )}
             </div>
           </div>
